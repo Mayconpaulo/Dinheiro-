@@ -31,7 +31,8 @@ data class ChatbotAction(
     @Json(name = "amount") val amount: Double = 0.0,
     @Json(name = "category") val category: String = "Outros",
     @Json(name = "expenseType") val expenseType: String = "variavel",
-    @Json(name = "bankOrNote") val bankOrNote: String = ""
+    @Json(name = "bankOrNote") val bankOrNote: String = "",
+    @Json(name = "installments") val installments: Int? = null
 )
 
 data class ChatMessage(
@@ -341,15 +342,21 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 if (responseObj != null) {
                     replyText = responseObj.reply
                     responseObj.action?.let { action ->
+                        val totalInst = if (action.expenseType == "parcelado") (action.installments ?: 12) else 0
+                        val finalAmount = if (action.expenseType == "parcelado" && totalInst > 0) {
+                            action.amount / totalInst
+                        } else {
+                            action.amount
+                        }
                         addTransaction(
                             name = action.name.ifBlank { "Gasto por IA" },
                             type = action.type,
-                            amount = action.amount,
+                            amount = finalAmount,
                             date = System.currentTimeMillis(),
                             expenseType = action.expenseType,
-                            totalInstallments = if (action.expenseType == "parcelado") 12 else 0,
+                            totalInstallments = totalInst,
                             paidInstallments = 0,
-                            remainingInstallments = if (action.expenseType == "parcelado") 12 else 0,
+                            remainingInstallments = totalInst,
                             category = action.category,
                             bankOrNote = action.bankOrNote
                         )
@@ -515,16 +522,17 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val allTx = _uiState.value.transactions
         val jsonInstruction = """
             Sua resposta deve ser OBRIGATORIAMENTE um objeto JSON válido contendo duas propriedades:
-            1. "reply": Uma string em português brasileiro com sua resposta/mensagem amigável para o usuário. Se o usuário quiser cadastrar uma transação (como "comprei um salgado de R$ 20 pelo Mercado Pago") e faltarem informações cruciais para você adicioná-la (como o nome, se é gasto ou entrada, o valor, ou a categoria/banco), você deve fazer perguntas simples e inteligentes em "reply" para completar os dados (Exemplo: "É um gasto fixo, variável ou parcelado?") antes de preencher o "action".
+            1. "reply": Uma string em português brasileiro com sua resposta/mensagem amigável para o usuário. Se o usuário quiser cadastrar uma transação (como "comprei um salgado de R$ 20 pelo Mercado Pago") e faltarem informações cruciais para você adicioná-la (como se é gasto fixo, variável ou parcelado, ou qual categoria/banco de preferência), você deve fazer perguntas simples e inteligentes em "reply" para completar os dados (Exemplo: "Esse gasto é fixo, variável ou parcelado?") antes de preencher o "action".
             2. "action": Se você tiver os dados necessários para adicionar a transação, preencha este objeto JSON. Caso contrário (ou se for apenas uma conversa comum/dúvida), "action" deve ser obrigatoriamente null.
                Estrutura do "action" (todos os campos abaixo são obrigatórios se "action" não for nulo):
                {
                  "name": "Breve nome/descritivo do item ou serviço",
                  "type": "gasto" ou "entrada",
-                 "amount": valor numérico correspondente (Double),
+                 "amount": valor TOTAL numérico correspondente (Double) (Se for gasto parcelado, informe aqui o valor total da compra),
                  "category": "Nome do banco ou categoria (ex: Mercado Pago, NuBank, Comida, Lazer, etc)",
                  "expenseType": "fixo", "variavel" ou "parcelado",
-                 "bankOrNote": "Nome do Banco ou observação correspondente"
+                 "bankOrNote": "Nome do Banco ou observação correspondente",
+                 "installments": número de parcelas (apenas se expenseType for "parcelado", senão null)
                }
                
             REGRAS ADICIONAIS IMPORTANTES DE INTERPRETAÇÃO:

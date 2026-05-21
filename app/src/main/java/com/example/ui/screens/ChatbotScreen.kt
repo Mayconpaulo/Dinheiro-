@@ -26,6 +26,16 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.FinanceViewModel
 import kotlinx.coroutines.launch
+import android.content.Intent
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.RecognitionListener
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 
 @Composable
 fun ChatbotScreen(
@@ -38,6 +48,103 @@ fun ChatbotScreen(
     val listState = rememberLazyListState()
 
     var messageText by remember { mutableStateOf("") }
+
+    val context = LocalContext.current
+    var isListening by remember { mutableStateOf(false) }
+    var speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
+
+    fun stopListening() {
+        isListening = false
+        speechRecognizer?.stopListening()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
+    }
+
+    fun startListening() {
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            Toast.makeText(context, "Reconhecimento de fala não disponível neste dispositivo", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        stopListening()
+        
+        isListening = true
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        }
+
+        val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+        speechRecognizer = recognizer
+
+        recognizer.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {
+                isListening = false
+            }
+            override fun onError(error: Int) {
+                isListening = false
+                val errorMessage = when (error) {
+                    SpeechRecognizer.ERROR_AUDIO -> "Erro de áudio"
+                    SpeechRecognizer.ERROR_CLIENT -> "Erro no cliente"
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permissão insuficiente"
+                    SpeechRecognizer.ERROR_NETWORK -> "Erro de rede"
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Tempo esgotado de rede"
+                    SpeechRecognizer.ERROR_NO_MATCH -> "Não entendi o que falou"
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Serviço ocupado"
+                    SpeechRecognizer.ERROR_SERVER -> "Erro no servidor"
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Tempo limite de fala"
+                    else -> "Erro desconhecido"
+                }
+                Toast.makeText(context, "Erro de voz: $errorMessage", Toast.LENGTH_SHORT).show()
+                stopListening()
+            }
+
+            override fun onResults(results: Bundle?) {
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    val textSpoken = matches[0]
+                    if (textSpoken.isNotBlank()) {
+                        messageText = textSpoken
+                        viewModel.sendMessageToChatbot(textSpoken.trim())
+                        messageText = ""
+                    }
+                }
+                stopListening()
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    messageText = matches[0]
+                }
+            }
+
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+
+        recognizer.startListening(intent)
+    }
+
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            startListening()
+        } else {
+            Toast.makeText(context, "Permissão de áudio necessária para usar o microfone", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            stopListening()
+        }
+    }
 
     // Quick suggestion questions
     val suggestions = listOf(
@@ -301,7 +408,7 @@ fun ChatbotScreen(
             OutlinedTextField(
                 value = messageText,
                 onValueChange = { messageText = it },
-                placeholder = { Text("Faça perguntas sobre seus gastos...") },
+                placeholder = { Text("Pesquise gasta/fale para adicionar...") },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("chat_input"),
@@ -318,6 +425,32 @@ fun ChatbotScreen(
                 shape = RoundedCornerShape(24.dp),
                 singleLine = true
             )
+
+            IconButton(
+                onClick = {
+                    if (isListening) {
+                        stopListening()
+                    } else {
+                        requestPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(if (isListening) AccentPink else CardBackground)
+                    .border(
+                        1.dp,
+                        if (isListening) AccentPink.copy(alpha = 0.5f) else BorderColor,
+                        CircleShape
+                    )
+                    .testTag("voice_input_button"),
+            ) {
+                Icon(
+                    imageVector = if (isListening) Icons.Default.Stop else Icons.Default.Mic,
+                    contentDescription = if (isListening) "Ouvindo... Toque para parar" else "Falar gasto",
+                    tint = if (isListening) Color.Black else Color.White
+                )
+            }
 
             FloatingActionButton(
                 onClick = {

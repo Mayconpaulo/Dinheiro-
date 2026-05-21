@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.FinanceViewModel
+import com.example.data.model.Transaction
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -47,6 +48,7 @@ import java.util.*
 @Composable
 fun AddTransactionScreen(
     viewModel: FinanceViewModel,
+    transactionToEdit: Transaction? = null,
     onTransactionSaved: () -> Unit,
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null
@@ -55,25 +57,33 @@ fun AddTransactionScreen(
     val scrollState = rememberScrollState()
 
     // Form states
-    var transactionType by remember { mutableStateOf("gasto") } // "gasto" or "entrada"
-    var name by remember { mutableStateOf("") }
-    var amountStr by remember { mutableStateOf("") }
-    var selectedDate by remember { mutableStateOf(System.currentTimeMillis()) }
-    var expenseType by remember { mutableStateOf("fixo") } // "fixo", "variavel", "parcelado"
+    var transactionType by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.type ?: "gasto") }
+    var name by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.name ?: "") }
+    var amountStr by remember(transactionToEdit) {
+        mutableStateOf(
+            if (transactionToEdit != null && transactionToEdit.expenseType == "parcelado") {
+                (transactionToEdit.amount * transactionToEdit.totalInstallments).toString()
+            } else {
+                transactionToEdit?.amount?.toString() ?: ""
+            }
+        )
+    }
+    var selectedDate by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.date ?: System.currentTimeMillis()) }
+    var expenseType by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.expenseType ?: "fixo") }
 
     // Installment states
-    var totalInstallmentsStr by remember { mutableStateOf("12") }
-    var paidInstallmentsStr by remember { mutableStateOf("0") }
+    var totalInstallmentsStr by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.totalInstallments?.toString() ?: "12") }
+    var paidInstallmentsStr by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.paidInstallments?.toString() ?: "0") }
 
     // Category and Custom bank fields
     val uiState by viewModel.uiState.collectAsState()
     val categories = uiState.categories
 
-    var categoryText by remember { mutableStateOf("") }
+    var categoryText by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.category ?: "") }
     
     // Auto preset first available category
     LaunchedEffect(categories, transactionType) {
-        if (categoryText.isBlank() || !categories.contains(categoryText)) {
+        if (transactionToEdit == null && (categoryText.isBlank() || !categories.contains(categoryText))) {
             if (transactionType == "gasto") {
                 val hasComida = categories.any { it.equals("Comida", ignoreCase = true) }
                 categoryText = if (hasComida) {
@@ -124,7 +134,7 @@ fun AddTransactionScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Nova Movimentação",
+                text = if (transactionToEdit != null) "Editar Movimentação" else "Nova Movimentação",
                 color = Color.White,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
@@ -604,22 +614,44 @@ fun AddTransactionScreen(
                 } else {
                     validationError = null
 
-                    val totalInst = totalInstallmentsStr.toIntOrNull() ?: 0
+                    val totalInst = totalInstallmentsStr.toIntOrNull() ?: 12
                     val paidInst = paidInstallmentsStr.toIntOrNull() ?: 0
                     val remainingInst = (totalInst - paidInst).coerceAtLeast(0)
 
-                    viewModel.addTransaction(
-                        name = name.trim(),
-                        type = transactionType,
-                        amount = amount,
-                        date = selectedDate,
-                        expenseType = if (transactionType == "gasto") expenseType else "",
-                        totalInstallments = if (transactionType == "gasto" && expenseType == "parcelado") totalInst else 0,
-                        paidInstallments = if (transactionType == "gasto" && expenseType == "parcelado") paidInst else 0,
-                        remainingInstallments = if (transactionType == "gasto" && expenseType == "parcelado") remainingInst else 0,
-                        category = categoryText.trim(),
-                        bankOrNote = "" // Bank unified under categories as requested
-                    )
+                    val finalAmount = if (transactionType == "gasto" && expenseType == "parcelado") {
+                        val divisor = if (totalInst > 0) totalInst else 1
+                        amount / divisor
+                    } else {
+                        amount
+                    }
+
+                    if (transactionToEdit != null) {
+                        val updatedTx = transactionToEdit.copy(
+                            name = name.trim(),
+                            type = transactionType,
+                            amount = finalAmount,
+                            date = selectedDate,
+                            expenseType = if (transactionType == "gasto") expenseType else "",
+                            totalInstallments = if (transactionType == "gasto" && expenseType == "parcelado") totalInst else 0,
+                            paidInstallments = if (transactionType == "gasto" && expenseType == "parcelado") paidInst else 0,
+                            remainingInstallments = if (transactionType == "gasto" && expenseType == "parcelado") remainingInst else 0,
+                            category = categoryText.trim()
+                        )
+                        viewModel.updateTransaction(updatedTx)
+                    } else {
+                        viewModel.addTransaction(
+                            name = name.trim(),
+                            type = transactionType,
+                            amount = finalAmount,
+                            date = selectedDate,
+                            expenseType = if (transactionType == "gasto") expenseType else "",
+                            totalInstallments = if (transactionType == "gasto" && expenseType == "parcelado") totalInst else 0,
+                            paidInstallments = if (transactionType == "gasto" && expenseType == "parcelado") paidInst else 0,
+                            remainingInstallments = if (transactionType == "gasto" && expenseType == "parcelado") remainingInst else 0,
+                            category = categoryText.trim(),
+                            bankOrNote = "" // Bank unified under categories as requested
+                        )
+                    }
 
                     onTransactionSaved()
                 }

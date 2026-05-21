@@ -40,6 +40,7 @@ import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.SettingsDialog
 import com.example.ui.screens.ProfileDialog
+import com.example.data.model.Transaction
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import com.example.ui.theme.MyApplicationTheme
@@ -77,6 +78,7 @@ fun MainContent() {
     var currentScreen by remember { mutableStateOf(Screen.Dashboard) }
     var showChatbotPopup by remember { mutableStateOf(false) }
     var showAddTransactionPopup by remember { mutableStateOf(false) }
+    var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var showSettingsPopup by remember { mutableStateOf(false) }
     var showProfilePopup by remember { mutableStateOf(false) }
 
@@ -127,14 +129,16 @@ fun MainContent() {
                         Screen.Dashboard -> {
                             DashboardScreen(
                                 viewModel = viewModel,
-                                onNavigateToAdd = { showAddTransactionPopup = true },
+                                onNavigateToAdd = { transactionToEdit = null; showAddTransactionPopup = true },
                                 onOpenSettings = { showSettingsPopup = true },
-                                onOpenProfile = { showProfilePopup = true }
+                                onOpenProfile = { showProfilePopup = true },
+                                onEditTransaction = { tx -> transactionToEdit = tx; showAddTransactionPopup = true }
                             )
                         }
                         Screen.History -> {
                             HistoryScreen(
-                                viewModel = viewModel
+                                viewModel = viewModel,
+                                onEditTransaction = { tx -> transactionToEdit = tx; showAddTransactionPopup = true }
                             )
                         }
                     }
@@ -318,7 +322,7 @@ fun MainContent() {
                                     color = Color.White.copy(alpha = 0.3f),
                                     shape = CircleShape
                                 )
-                                .clickable { showAddTransactionPopup = true }
+                                .clickable { transactionToEdit = null; showAddTransactionPopup = true }
                                 .testTag("add_transaction_fab"),
                             contentAlignment = Alignment.Center
                         ) {
@@ -423,10 +427,15 @@ fun MainContent() {
                     Box(modifier = Modifier.fillMaxSize()) {
                         AddTransactionScreen(
                             viewModel = viewModel,
+                            transactionToEdit = transactionToEdit,
                             onTransactionSaved = {
                                 showAddTransactionPopup = false
+                                transactionToEdit = null
                             },
-                            onClose = { showAddTransactionPopup = false }
+                            onClose = {
+                                showAddTransactionPopup = false
+                                transactionToEdit = null
+                            }
                         )
                     }
                 }

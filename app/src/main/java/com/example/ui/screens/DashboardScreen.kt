@@ -84,6 +84,7 @@ fun DashboardScreen(
     onNavigateToAdd: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenProfile: () -> Unit,
+    onEditTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -748,6 +749,17 @@ fun DashboardScreen(
         val category = selectedCategoryDetails!!
         val categoryTxList = uiState.transactions.filter { it.category.equals(category, ignoreCase = true) }
         val categoryTotal = categoryTxList.sumOf { if (it.type == "gasto") it.amount else 0.0 }
+        val limitSpent = categoryTxList.sumOf {
+            if (it.type == "gasto") {
+                if (it.expenseType == "parcelado" && it.totalInstallments > 0) {
+                    it.amount * it.totalInstallments
+                } else {
+                    it.amount
+                }
+            } else {
+                0.0
+            }
+        }
         val categoryIconAndColor = getCategoryIconAndColor(category)
 
         val creditLimit = viewModel.getCategoryLimit(category)
@@ -963,7 +975,7 @@ fun DashboardScreen(
                                 }
                             } else {
                                 if (creditLimit != null) {
-                                    val spent = categoryTotal
+                                    val spent = limitSpent
                                     val remaining = creditLimit - spent
                                     val pct = if (creditLimit > 0) (spent / creditLimit).coerceIn(0.0, 1.0) else 0.0
 
@@ -1050,6 +1062,9 @@ fun DashboardScreen(
                                         .fillMaxWidth()
                                         .background(CardBackground, RoundedCornerShape(12.dp))
                                         .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            clickTransactionDetails = tx
+                                        }
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -1295,16 +1310,33 @@ fun DashboardScreen(
                                 onClick = { showConfirmDelete = true },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3366).copy(alpha = 0.15f)),
-                                border = BorderStroke(1.dp, Color(0xFFFF3366).copy(alpha = 0.4f))
+                                border = BorderStroke(1.dp, Color(0xFFFF3366).copy(alpha = 0.4f)),
+                                contentPadding = PaddingValues(0.dp)
                             ) {
-                                Text("Excluir", color = Color(0xFFFF7A8A), fontWeight = FontWeight.Bold)
+                                Text("Excluir", color = Color(0xFFFF7A8A), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            Button(
+                                onClick = {
+                                    onEditTransaction(tx)
+                                    holdTransactionDetails = null
+                                    clickTransactionDetails = null
+                                    holdCategoryDetails = null
+                                    clickCategoryDetails = null
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple.copy(alpha = 0.2f)),
+                                border = BorderStroke(1.5.dp, PrimaryPurple.copy(alpha = 0.6f)),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("Editar", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                             Button(
                                 onClick = { holdTransactionDetails = null; clickTransactionDetails = null },
-                                modifier = Modifier.weight(1.2f),
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyan)
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyan),
+                                contentPadding = PaddingValues(0.dp)
                             ) {
-                                Text("Concluído", color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text("Voltar", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                     }

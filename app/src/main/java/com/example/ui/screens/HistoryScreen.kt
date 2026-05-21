@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,6 +55,7 @@ fun getHistoryCategoryIconAndColor(category: String): Pair<androidx.compose.ui.g
 @Composable
 fun HistoryScreen(
     viewModel: FinanceViewModel,
+    onEditTransaction: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -358,6 +360,7 @@ fun HistoryScreen(
         if (selectedTransactionDetails != null) {
             val tx = selectedTransactionDetails!!
             val df = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+            var showConfirmDelete by remember(tx) { mutableStateOf(false) }
 
             Dialog(onDismissRequest = { holdTransactionDetails = null; clickTransactionDetails = null }) {
                 Card(
@@ -473,16 +476,77 @@ fun HistoryScreen(
                             }
                         }
 
-                        Button(
-                            onClick = { holdTransactionDetails = null; clickTransactionDetails = null },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .testTag("history_detail_close_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = BorderColor),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Fechar", color = Color.White, fontWeight = FontWeight.Bold)
+                        if (showConfirmDelete) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Deseja realmente apagar esta movimentação?",
+                                color = AccentPink,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { showConfirmDelete = false },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = BorderColor)
+                                ) {
+                                    Text("Voltar", color = Color.White)
+                                }
+                                Button(
+                                    onClick = {
+                                        viewModel.deleteTransaction(tx)
+                                        showConfirmDelete = false
+                                        holdTransactionDetails = null
+                                        clickTransactionDetails = null
+                                    },
+                                    modifier = Modifier.weight(1.2f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3366))
+                                ) {
+                                    Text("Sim, Excluir", color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { showConfirmDelete = true },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3366).copy(alpha = 0.15f)),
+                                    border = BorderStroke(1.dp, Color(0xFFFF3366).copy(alpha = 0.4f)),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("Excluir", color = Color(0xFFFF7A8A), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Button(
+                                    onClick = {
+                                        onEditTransaction(tx)
+                                        holdTransactionDetails = null
+                                        clickTransactionDetails = null
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple.copy(alpha = 0.2f)),
+                                    border = BorderStroke(1.5.dp, PrimaryPurple.copy(alpha = 0.6f)),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("Editar", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                Button(
+                                    onClick = { holdTransactionDetails = null; clickTransactionDetails = null },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyan),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("Fechar", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 }
