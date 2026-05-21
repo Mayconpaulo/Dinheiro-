@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +17,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +36,21 @@ import com.example.ui.viewmodel.FinanceViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+
+
+fun getHistoryCategoryIconAndColor(category: String): Pair<androidx.compose.ui.graphics.vector.ImageVector, Color> {
+    return when (category.lowercase().trim()) {
+        "comida", "alimentação", "alimentacao", "restaurante", "supermercado" -> Pair(androidx.compose.material.icons.Icons.Default.Restaurant, Color(0xFFFF9800))
+        "lazer", "entretenimento", "cinema", "viagem", "show" -> Pair(androidx.compose.material.icons.Icons.Default.SportsEsports, Color(0xFF00B0FF))
+        "moradia", "aluguel", "água", "luz", "internet", "casa" -> Pair(androidx.compose.material.icons.Icons.Default.Home, Color(0xFFFFEB3B))
+        "transporte", "combustível", "uber", "ônibus", "carro" -> Pair(androidx.compose.material.icons.Icons.Default.DirectionsCar, Color(0xFF9C27B0))
+        "salário", "salario", "entrada", "renda", "recebimento" -> Pair(androidx.compose.material.icons.Icons.Default.Payments, Color(0xFF00E676))
+        "saúde", "saude", "farmácia", "medicina" -> Pair(androidx.compose.material.icons.Icons.Default.LocalHospital, Color(0xFFE91E63))
+        "educação", "educacao", "curso", "faculdade", "livros" -> Pair(androidx.compose.material.icons.Icons.Default.School, Color(0xFFAB47BC))
+        else -> Pair(androidx.compose.material.icons.Icons.Default.Category, Color(0xFF9E9EAF))
+    }
+}
+
 @Composable
 fun HistoryScreen(
     viewModel: FinanceViewModel,
@@ -38,6 +61,10 @@ fun HistoryScreen(
     // Filters state
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("todos") } // "todos", "gastos", "entradas"
+
+    var holdTransactionDetails by remember { mutableStateOf<Transaction?>(null) }
+    var clickTransactionDetails by remember { mutableStateOf<Transaction?>(null) }
+    val selectedTransactionDetails = holdTransactionDetails ?: clickTransactionDetails
 
     val filteredList = uiState.transactions.filter { tx ->
         // Name / bank match query
@@ -202,7 +229,7 @@ fun HistoryScreen(
                             },
                             text = {
                                 Text(
-                                    text = "Tem certeza que deseja excluir '${tx.name}'? Esta operação não pode ser desfeita.",
+                                    text = if (uiState.isValuesHidden) "Tem certeza que deseja excluir esta transação? Esta operação não pode ser desfeita." else "Tem certeza que deseja excluir '${tx.name}'? Esta operação não pode ser desfeita.",
                                     color = GrayText,
                                     fontSize = 13.sp
                                 )
@@ -228,6 +255,12 @@ fun HistoryScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .holdOrClick(
+                                key = tx,
+                                onClick = { clickTransactionDetails = tx },
+                                onHoldStart = { holdTransactionDetails = tx },
+                                onHoldEnd = { holdTransactionDetails = null }
+                            )
                             .animateContentSize(),
                         colors = CardDefaults.cardColors(containerColor = CardBackground),
                         shape = RoundedCornerShape(16.dp)
@@ -255,7 +288,7 @@ fun HistoryScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = tx.name,
+                                    text = if (uiState.isValuesHidden) "••••" else tx.name,
                                     color = Color.White,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
@@ -298,7 +331,7 @@ fun HistoryScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = if (tx.type == "gasto") "- R$ ${"%,.2f".format(tx.amount)}" else "+ R$ ${"%,.2f".format(tx.amount)}",
+                                    text = if (uiState.isValuesHidden) "R$ ••••" else (if (tx.type == "gasto") "- R$ ${"%,.2f".format(tx.amount)}" else "+ R$ ${"%,.2f".format(tx.amount)}"),
                                     color = if (tx.type == "gasto") AccentPink else AccentGreen,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Black
@@ -316,6 +349,140 @@ fun HistoryScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (selectedTransactionDetails != null) {
+            val tx = selectedTransactionDetails!!
+            val df = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+
+            Dialog(onDismissRequest = { holdTransactionDetails = null; clickTransactionDetails = null }) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .wrapContentHeight()
+                        .border(
+                            width = 1.5.dp,
+                            brush = Brush.linearGradient(
+                                listOf(
+                                    if (tx.type == "gasto") AccentPink else AccentGreen,
+                                    PrimaryPurple
+                                )
+                            ),
+                            shape = RoundedCornerShape(24.dp)
+                        ),
+                    colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.98f)),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Header Icon
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (tx.type == "gasto") AccentPink.copy(alpha = 0.15f)
+                                    else AccentGreen.copy(alpha = 0.15f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (tx.type == "gasto") Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+                                contentDescription = tx.type,
+                                tint = if (tx.type == "gasto") AccentPink else AccentGreen,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        Text(
+                            text = if (uiState.isValuesHidden) "••••" else tx.name,
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+
+                        // Detail Row Info
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(BorderColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                                .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Valor:", color = GrayText, fontSize = 13.sp)
+                                Text(
+                                    text = if (uiState.isValuesHidden) "R$ ••••" else "R$ ${"%,.2f".format(tx.amount)}",
+                                    color = if (tx.type == "gasto") AccentPink else AccentGreen,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Divider(color = BorderColor)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Categoria:", color = GrayText, fontSize = 13.sp)
+                                Text(tx.category, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Divider(color = BorderColor)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Data:", color = GrayText, fontSize = 13.sp)
+                                Text(df.format(Date(tx.date)), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                            if (tx.bankOrNote.isNotEmpty()) {
+                                Divider(color = BorderColor)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Origem / Destino:", color = GrayText, fontSize = 13.sp)
+                                    Text(tx.bankOrNote, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                            if (tx.expenseType.isNotEmpty()) {
+                                Divider(color = BorderColor)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Recorrência / Tipo:", color = GrayText, fontSize = 13.sp)
+                                    Text(
+                                        text = if (tx.expenseType == "parcelado") "Parcelado (${tx.paidInstallments + 1}/${tx.totalInstallments})" else "Mensal / Fixo",
+                                        color = PrimaryCyan,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = { holdTransactionDetails = null; clickTransactionDetails = null },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("history_detail_close_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = BorderColor),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Fechar", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

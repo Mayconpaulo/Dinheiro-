@@ -28,6 +28,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -165,7 +170,7 @@ fun AddTransactionScreen(
             ) {
                 Text(
                     text = "Gasto",
-                    color = Color.White,
+                    color = if (transactionType == "gasto") Color.Black else Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 )
@@ -191,53 +196,77 @@ fun AddTransactionScreen(
             }
         }
 
-        // --- Amount Input Card ---
-        Card(
+        // --- Amount Input Box (Highly Intuitive & Clickable Box) ---
+        var isAmountFocused by remember { mutableStateOf(false) }
+        val amountFocusRequester = remember { FocusRequester() }
+
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = CardBackground),
-            shape = RoundedCornerShape(16.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Text(
+                text = "Valor da Transação",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CardBackground)
+                    .border(
+                        width = if (isAmountFocused) 1.5.dp else 1.dp,
+                        color = if (isAmountFocused) (if (transactionType == "gasto") AccentPink else AccentGreen) else BorderColor,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .clickable { amountFocusRequester.requestFocus() }
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
-                Text(
-                    text = "VALOR DA TRANSAÇÃO",
-                    color = GrayText,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.Start,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = "R$ ",
                         color = if (transactionType == "gasto") AccentPink else AccentGreen,
-                        fontSize = 32.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Black
                     )
-                    BasicTextField(
-                        value = amountStr,
-                        onValueChange = { newValue ->
-                            if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
-                                amountStr = newValue
-                            }
-                        },
-                        textStyle = LocalTextStyle.current.copy(
-                            color = Color.White,
-                            fontSize = 36.sp,
-                            fontWeight = FontWeight.Black,
-                            textAlign = TextAlign.Start
-                        ),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier
-                            .widthIn(min = 120.dp, max = 220.dp)
-                            .testTag("amount_input"),
-                        singleLine = true
-                    )
+                    
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (amountStr.isEmpty()) {
+                            Text(
+                                text = "0,00",
+                                color = GrayText.copy(alpha = 0.5f),
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                        BasicTextField(
+                            value = amountStr,
+                            onValueChange = { newValue ->
+                                if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                                    amountStr = newValue
+                                }
+                            },
+                            textStyle = LocalTextStyle.current.copy(
+                                color = Color.White,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                textAlign = TextAlign.Start
+                            ),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(amountFocusRequester)
+                                .onFocusChanged { isAmountFocused = it.isFocused }
+                                .testTag("amount_input"),
+                            singleLine = true
+                        )
+                    }
                 }
             }
         }
@@ -518,48 +547,37 @@ fun AddTransactionScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(if (isSelected) PrimaryCyan.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.03f))
+                                .background(if (isSelected) AccentGreen.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.02f))
                                 .border(
-                                    width = if (isSelected) 1.dp else 0.dp,
-                                    color = if (isSelected) PrimaryCyan else Color.Transparent,
+                                    width = if (isSelected) 1.5.dp else 0.dp,
+                                    color = if (isSelected) AccentGreen else Color.Transparent,
                                     shape = RoundedCornerShape(14.dp)
                                 )
-                                .clickable {
-                                    // Set up active selection trigger
-                                    selectedCategoryForAction = cat
+                                .pointerInput(cat) {
+                                    detectTapGestures(
+                                        onTap = {
+                                            // Click immediately selects the category/bank
+                                            categoryText = cat
+                                        },
+                                        onLongPress = {
+                                            // Long press lets you manage it (popup details/delete)
+                                            selectedCategoryForAction = cat
+                                        }
+                                    )
                                 }
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
                             Text(
                                 text = cat,
-                                color = if (isSelected) PrimaryCyan else Color.White,
+                                color = if (isSelected) AccentGreen else Color.White,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
             }
         }
-
-        OutlinedTextField(
-            value = if (categoryText.isBlank()) "Escolha acima ou crie uma categoria" else categoryText,
-            onValueChange = {},
-            readOnly = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("category_input"),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = BorderColor,
-                unfocusedBorderColor = BorderColor,
-                focusedContainerColor = CardBackground,
-                unfocusedContainerColor = CardBackground,
-                focusedTextColor = if (categoryText.isBlank()) GrayText else Color.White,
-                unfocusedTextColor = if (categoryText.isBlank()) GrayText else Color.White
-            ),
-            shape = RoundedCornerShape(12.dp),
-            singleLine = true
-        )
 
         // --- Error message if any ---
         if (validationError != null) {

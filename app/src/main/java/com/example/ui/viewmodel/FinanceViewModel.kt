@@ -37,7 +37,9 @@ data class FinanceUiState(
     val reminderMinute: Int = 0,
     val isReminderEnabled: Boolean = true,
     val categories: List<String> = emptyList(),
-    val userAvatar: String = "👤"
+    val userAvatar: String = "👤",
+    val userProfileImageUri: String? = null,
+    val isValuesHidden: Boolean = false
 )
 
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
@@ -60,6 +62,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val dMin = sharedPrefs.getInt("reminder_minute", 0)
         val isRemEnabled = sharedPrefs.getBoolean("reminder_enabled", true)
         val avatar = sharedPrefs.getString("user_avatar", "👤") ?: "👤"
+        val profileImageUri = sharedPrefs.getString("user_profile_image_uri", null)
+        val valuesHidden = sharedPrefs.getBoolean("is_values_hidden", false)
         
         val defaultCats = setOf("Comida", "Lazer", "Moradia", "Transporte", "Saúde", "Educação", "Salário", "Investimento", "Reembolso", "Outros")
         val catsSet = sharedPrefs.getStringSet("custom_categories", defaultCats) ?: defaultCats
@@ -74,7 +78,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 reminderMinute = dMin,
                 isReminderEnabled = isRemEnabled,
                 userAvatar = avatar,
-                categories = catsList
+                categories = catsList,
+                userProfileImageUri = profileImageUri,
+                isValuesHidden = valuesHidden
             )
         }
 
@@ -134,6 +140,17 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 userAvatar = avatar
             )
         }
+    }
+
+    fun toggleValuesHidden() {
+        val current = _uiState.value.isValuesHidden
+        sharedPrefs.edit().putBoolean("is_values_hidden", !current).apply()
+        _uiState.update { it.copy(isValuesHidden = !current) }
+    }
+
+    fun updateProfileImageUri(uriString: String?) {
+        sharedPrefs.edit().putString("user_profile_image_uri", uriString).apply()
+        _uiState.update { it.copy(userProfileImageUri = uriString) }
     }
 
     fun addCategory(category: String) {

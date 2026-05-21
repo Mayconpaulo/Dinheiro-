@@ -5,8 +5,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -49,8 +53,33 @@ fun SettingsDialog(
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
+    var hasNotificationPermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    "android.permission.POST_NOTIFICATIONS"
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        )
+    }
+
     var hSelector by remember { mutableStateOf(uiState.reminderHour) }
     var mSelector by remember { mutableStateOf(uiState.reminderMinute) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotificationPermission = isGranted
+        if (isGranted) {
+            triggerLocalReminderNotification(context, hSelector, mSelector)
+            Toast.makeText(context, "Lembrete de teste acionado!", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Permissão de notificação negada.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -253,8 +282,12 @@ fun SettingsDialog(
                         // Test notification CTA
                         Button(
                             onClick = {
-                                triggerLocalReminderNotification(context, hSelector, mSelector)
-                                Toast.makeText(context, "Lembrete de teste acionado!", Toast.LENGTH_SHORT).show()
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
+                                    permissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
+                                } else {
+                                    triggerLocalReminderNotification(context, hSelector, mSelector)
+                                    Toast.makeText(context, "Lembrete de teste acionado!", Toast.LENGTH_SHORT).show()
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.08f)),
                             border = BorderStroke(1.dp, PrimaryCyan.copy(alpha = 0.3f)),

@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,9 +26,18 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Transaction
@@ -36,6 +46,55 @@ import com.example.ui.viewmodel.FinanceViewModel
 import com.example.ui.viewmodel.MonthlyMetrics
 import java.text.SimpleDateFormat
 import java.util.*
+
+fun Modifier.holdOrClick(
+    key: Any?,
+    onClick: () -> Unit,
+    onHoldStart: () -> Unit,
+    onHoldEnd: () -> Unit
+): Modifier = this.pointerInput(key) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        var releasedBeforeTimeout = false
+        val timeoutResult = withTimeoutOrNull(400L) {
+            while (true) {
+                val event = awaitPointerEvent()
+                if (event.changes.any { !it.pressed }) {
+                    releasedBeforeTimeout = true
+                    break
+                }
+            }
+            true
+        }
+        if (timeoutResult == null) {
+            onHoldStart()
+            while (true) {
+                val event = awaitPointerEvent()
+                if (event.changes.all { !it.pressed }) {
+                    break
+                }
+            }
+            onHoldEnd()
+        } else {
+            if (releasedBeforeTimeout) {
+                onClick()
+            }
+        }
+    }
+}
+
+fun getCategoryIconAndColor(category: String): Pair<ImageVector, Color> {
+    return when (category.lowercase().trim()) {
+        "comida", "alimentação", "alimentacao", "restaurante", "supermercado" -> Pair(Icons.Default.Restaurant, Color(0xFFFF9800))
+        "lazer", "entretenimento", "jogos", "viagem" -> Pair(Icons.Default.Celebration, Color(0xFFE91E63))
+        "moradia", "aluguel", "casa", "condomínio", "condominio" -> Pair(Icons.Default.Home, Color(0xFF2196F3))
+        "transporte", "combustível", "combustivel", "uber", "ônibus" -> Pair(Icons.Default.DirectionsCar, Color(0xFF00E5FF))
+        "salário", "salario", "entrada", "renda", "recebimento" -> Pair(Icons.Default.Payments, Color(0xFF00E676))
+        "saúde", "saude", "farmácia", "medicina" -> Pair(Icons.Default.LocalHospital, Color(0xFFE91E63))
+        "educação", "educacao", "curso", "faculdade", "livros" -> Pair(Icons.Default.School, Color(0xFFAB47BC))
+        else -> Pair(Icons.Default.Category, Color(0xFF9E9EAF))
+    }
+}
 
 @Composable
 fun DashboardScreen(
@@ -51,13 +110,22 @@ fun DashboardScreen(
     // Calculated metrics for selected month offset
     val metrics = viewModel.getProjectionsForMonthOffset(uiState.selectedMonthOffset)
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Transparent)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    var holdCategoryDetails by remember { mutableStateOf<String?>(null) }
+    var clickCategoryDetails by remember { mutableStateOf<String?>(null) }
+    val selectedCategoryDetails = holdCategoryDetails ?: clickCategoryDetails
+
+    var holdTransactionDetails by remember { mutableStateOf<Transaction?>(null) }
+    var clickTransactionDetails by remember { mutableStateOf<Transaction?>(null) }
+    val selectedTransactionDetails = holdTransactionDetails ?: clickTransactionDetails
+
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
         // --- Header with custom profile ---
         item {
             Spacer(modifier = Modifier.height(16.dp))
@@ -73,17 +141,29 @@ fun DashboardScreen(
                         .clickable { onOpenProfile() }
                         .padding(4.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(PrimaryCyan, PrimaryPurple, AccentPink))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = uiState.userAvatar.ifBlank { "👤" },
-                            fontSize = 24.sp
+                    if (uiState.userProfileImageUri != null) {
+                        AsyncImage(
+                            model = java.io.File(uiState.userProfileImageUri!!),
+                            contentDescription = "Foto de perfil",
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .border(1.5.dp, PrimaryCyan, CircleShape),
+                            contentScale = ContentScale.Crop
                         )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Brush.linearGradient(listOf(PrimaryCyan, PrimaryPurple, AccentPink))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = uiState.userAvatar.ifBlank { "👤" },
+                                fontSize = 24.sp
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
@@ -115,19 +195,43 @@ fun DashboardScreen(
                         }
                     }
                 }
-                IconButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(CardBackground)
-                        .testTag("dashboard_settings_button")
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Configurações",
-                        tint = Color.White
-                    )
+                    // Security visibility toggle icon (eye icon)
+                    IconButton(
+                        onClick = { viewModel.toggleValuesHidden() },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(CardBackground)
+                            .testTag("dashboard_security_eye_icon")
+                    ) {
+                        Icon(
+                            imageVector = if (uiState.isValuesHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = "Ocultar Valores",
+                            tint = if (uiState.isValuesHidden) AccentPink else PrimaryCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(CardBackground)
+                            .testTag("dashboard_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Configurações",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
@@ -266,7 +370,7 @@ fun DashboardScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "R$ ${"%,.2f".format(metrics.expenseTotal)}",
+                        text = if (uiState.isValuesHidden) "R$ ••••" else "R$ ${"%,.2f".format(metrics.expenseTotal)}",
                         color = Color.White,
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Black
@@ -286,7 +390,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Entradas: R$ ${"%,.2f".format(metrics.incomeTotal)}",
+                                text = if (uiState.isValuesHidden) "Entradas: R$ ••••" else "Entradas: R$ ${"%,.2f".format(metrics.incomeTotal)}",
                                 color = AccentGreen,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -350,7 +454,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "R$ ${"%,.0f".format(metrics.balance)}",
+                                text = if (uiState.isValuesHidden) "R$ ••••" else "R$ ${"%,.0f".format(metrics.balance)}",
                                 color = if (metrics.balance >= 0) AccentGreen else AccentPink,
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.Black
@@ -408,7 +512,14 @@ fun DashboardScreen(
                 val iconAndColor = getCategoryIconAndColor(category)
 
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .holdOrClick(
+                            key = category,
+                            onClick = { clickCategoryDetails = category },
+                            onHoldStart = { holdCategoryDetails = category },
+                            onHoldEnd = { holdCategoryDetails = null }
+                        ),
                     colors = CardDefaults.cardColors(containerColor = CardBackground),
                     shape = RoundedCornerShape(16.dp)
                 ) {
@@ -445,7 +556,7 @@ fun DashboardScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "R$ ${"%,.2f".format(spent)}",
+                                    text = if (uiState.isValuesHidden) "R$ ••••" else "R$ ${"%,.2f".format(spent)}",
                                     color = Color.White,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
@@ -524,6 +635,12 @@ fun DashboardScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .holdOrClick(
+                            key = tx,
+                            onClick = { clickTransactionDetails = tx },
+                            onHoldStart = { holdTransactionDetails = tx },
+                            onHoldEnd = { holdTransactionDetails = null }
+                        )
                         .testTag("transaction_item_${tx.id}"),
                     colors = CardDefaults.cardColors(containerColor = CardBackground),
                     shape = RoundedCornerShape(16.dp)
@@ -551,7 +668,7 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = tx.name,
+                                text = if (uiState.isValuesHidden) "••••" else tx.name,
                                 color = Color.White,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
@@ -593,7 +710,7 @@ fun DashboardScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = if (tx.type == "gasto") "- R$ ${"%,.2f".format(tx.amount)}" else "+ R$ ${"%,.2f".format(tx.amount)}",
+                            text = if (uiState.isValuesHidden) "R$ ••••" else (if (tx.type == "gasto") "- R$ ${"%,.2f".format(tx.amount)}" else "+ R$ ${"%,.2f".format(tx.amount)}"),
                             color = if (tx.type == "gasto") AccentPink else AccentGreen,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Black
@@ -606,17 +723,408 @@ fun DashboardScreen(
             }
         }
     }
-}
 
-fun getCategoryIconAndColor(category: String): Pair<ImageVector, Color> {
-    return when (category.lowercase().trim()) {
-        "comida", "alimentação", "alimentacao", "restaurante", "supermercado" -> Pair(Icons.Default.Restaurant, Color(0xFFFF9800))
-        "lazer", "entretenimento", "jogos", "viagem" -> Pair(Icons.Default.Celebration, Color(0xFFE91E63))
-        "moradia", "aluguel", "casa", "condomínio", "condominio" -> Pair(Icons.Default.Home, Color(0xFF2196F3))
-        "transporte", "combustível", "combustivel", "uber", "ônibus" -> Pair(Icons.Default.DirectionsCar, Color(0xFF00E5FF))
-        "salário", "salario", "entrada", "renda", "recebimento" -> Pair(Icons.Default.Payments, Color(0xFF00E676))
-        "saúde", "saude", "farmácia", "medicina" -> Pair(Icons.Default.LocalHospital, Color(0xFFE91E63))
-        "educação", "educacao", "curso", "faculdade", "livros" -> Pair(Icons.Default.School, Color(0xFFAB47BC))
-        else -> Pair(Icons.Default.Category, Color(0xFF9E9EAF))
+    // --- Popup details for a selected Category ---
+    if (selectedCategoryDetails != null) {
+        val category = selectedCategoryDetails!!
+        val categoryTxList = uiState.transactions.filter { it.category.equals(category, ignoreCase = true) }
+        val categoryTotal = categoryTxList.sumOf { if (it.type == "gasto") it.amount else 0.0 }
+        val categoryIconAndColor = getCategoryIconAndColor(category)
+
+        Dialog(onDismissRequest = { holdCategoryDetails = null; clickCategoryDetails = null }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .fillMaxHeight(0.75f)
+                    .border(
+                        width = 1.5.dp,
+                        brush = Brush.linearGradient(listOf(categoryIconAndColor.second, PrimaryPurple)),
+                        shape = RoundedCornerShape(24.dp)
+                    ),
+                colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.98f)),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(categoryIconAndColor.second.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = categoryIconAndColor.first,
+                                    contentDescription = category,
+                                    tint = categoryIconAndColor.second
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = category,
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Resumo dos Gastos",
+                                    color = GrayText,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = { holdCategoryDetails = null; clickCategoryDetails = null },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Fechar",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    // Total Row Box
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(BorderColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                            .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Total de Saídas:",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = if (uiState.isValuesHidden) "R$ ••••" else "R$ ${"%,.2f".format(categoryTotal)}",
+                                color = AccentPink,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Movimentações (${categoryTxList.size})",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    if (categoryTxList.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Nenhum gasto nesta categoria ainda.",
+                                color = GrayText,
+                                fontSize = 13.sp
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(categoryTxList) { tx ->
+                                val df = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(CardBackground, RoundedCornerShape(12.dp))
+                                        .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (uiState.isValuesHidden) "••••" else tx.name,
+                                            color = Color.White,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = df.format(Date(tx.date)),
+                                            color = GrayText,
+                                            fontSize = 10.sp
+                                        )
+                                        if (tx.expenseType == "parcelado") {
+                                            Text(
+                                                text = "Parcela ${tx.paidInstallments + 1}/${tx.totalInstallments}",
+                                                color = PrimaryCyan,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (uiState.isValuesHidden) "R$ ••••" else (if (tx.type == "gasto") "- R$ ${"%,.2f".format(tx.amount)}" else "+ R$ ${"%,.2f".format(tx.amount)}"),
+                                        color = if (tx.type == "gasto") AccentPink else AccentGreen,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+
+    // --- Popup details with advanced options for a selected Transaction ---
+    if (selectedTransactionDetails != null) {
+        val tx = selectedTransactionDetails!!
+        val df = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        var showConfirmDelete by remember { mutableStateOf(false) }
+
+        Dialog(onDismissRequest = { holdTransactionDetails = null; clickTransactionDetails = null }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .wrapContentHeight()
+                    .border(
+                        width = 1.5.dp,
+                        brush = Brush.linearGradient(
+                            listOf(
+                                if (tx.type == "gasto") AccentPink else AccentGreen,
+                                PrimaryPurple
+                            )
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    ),
+                colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.98f)),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Header Icon
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (tx.type == "gasto") AccentPink.copy(alpha = 0.15f)
+                                else AccentGreen.copy(alpha = 0.15f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (tx.type == "gasto") Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+                            contentDescription = tx.type,
+                            tint = if (tx.type == "gasto") AccentPink else AccentGreen,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Text(
+                        text = if (uiState.isValuesHidden) "••••" else tx.name,
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+
+                    // Detail Row Info
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(BorderColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                            .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Valor:", color = GrayText, fontSize = 13.sp)
+                            Text(
+                                text = if (uiState.isValuesHidden) "R$ ••••" else "R$ ${"%,.2f".format(tx.amount)}",
+                                color = if (tx.type == "gasto") AccentPink else AccentGreen,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Divider(color = BorderColor)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Tipo de Lançamento:", color = GrayText, fontSize = 13.sp)
+                            Text(
+                                text = if (tx.type == "gasto") "Gasto / Saída" else "Renda / Entrada",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Divider(color = BorderColor)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Data:", color = GrayText, fontSize = 13.sp)
+                            Text(
+                                text = df.format(Date(tx.date)),
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Divider(color = BorderColor)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Categoria / Origem:", color = GrayText, fontSize = 13.sp)
+                            Text(
+                                text = tx.category,
+                                color = PrimaryCyan,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        if (tx.expenseType.isNotEmpty()) {
+                            Divider(color = BorderColor)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Perfil de Recorrência:", color = GrayText, fontSize = 13.sp)
+                                Text(
+                                    text = if (tx.expenseType == "parcelado") "Parcelamento" else "Fixo / Mensal",
+                                    color = PrimaryPurple,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        if (tx.expenseType == "parcelado") {
+                            Divider(color = BorderColor)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Parcelamento Atual:", color = GrayText, fontSize = 13.sp)
+                                Text(
+                                    text = "${tx.paidInstallments + 1}ª de ${tx.totalInstallments} parcelas",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Divider(color = BorderColor)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Parcelas Faltantes:", color = GrayText, fontSize = 13.sp)
+                                Text(
+                                    text = "${tx.remainingInstallments} restantes",
+                                    color = AccentPink,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    if (showConfirmDelete) {
+                        Text(
+                            text = "Deseja realmente apagar esta movimentação?",
+                            color = AccentPink,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { showConfirmDelete = false },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = BorderColor)
+                            ) {
+                                Text("Voltar", color = Color.White)
+                            }
+                            Button(
+                                onClick = {
+                                    viewModel.deleteTransaction(tx)
+                                    showConfirmDelete = false
+                                    holdTransactionDetails = null
+                                    clickTransactionDetails = null
+                                },
+                                modifier = Modifier.weight(1.2f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3366))
+                            ) {
+                                Text("Sim, Excluir", color = Color.Black, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { showConfirmDelete = true },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3366).copy(alpha = 0.15f)),
+                                border = BorderStroke(1.dp, Color(0xFFFF3366).copy(alpha = 0.4f))
+                            ) {
+                                Text("Excluir", color = Color(0xFFFF7A8A), fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = { holdTransactionDetails = null; clickTransactionDetails = null },
+                                modifier = Modifier.weight(1.2f),
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyan)
+                            ) {
+                                Text("Concluído", color = Color.Black, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 }

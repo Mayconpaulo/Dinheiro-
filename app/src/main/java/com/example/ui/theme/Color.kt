@@ -2,14 +2,14 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val PrimaryCyan = Color(0xFF8BA389) // Elegant Matte Military Sage Green
-val PrimaryPurple = Color(0xFF9FBCA7) // Premium Soft Olive/Eucalyptus Green
-val DeepBackground = Color(0xFF030504) // Dark Obsidian Green Substrate
-val CardBackground = Color(0xFF0C100E) // Sophisticated dark matte green-grey card surface
-val AccentPink = Color(0xFFD4C5B9) // Luxurious Warm Sand/Pastel Gold Accent
-val AccentGreen = Color(0xFFB1C4B5) // Elegant Light Eucalyptus
-val GrayText = Color(0xFF828A85) // Sophisticated dimmed sage text
-val BorderColor = Color(0xFF1B231D) // Dark matte border
+val PrimaryCyan = Color(0xFF00FFCC) // True high-contrast Neon Cyan/Green-teal
+val PrimaryPurple = Color(0xFFD3A4FF) // Beautiful Radiant Lavender
+val DeepBackground = Color(0xFF030504) // Deep AMOLED pitch black substrate
+val CardBackground = Color(0xFF0E1310) // Dark Slate matte card surface
+val AccentPink = Color(0xFFFF3366) // Vibrant Crimson Rose-pink (replaces unreadable beige)
+val AccentGreen = Color(0xFF00E676) // Bright, beautiful emerald green
+val GrayText = Color(0xFF9EAEA2) // High contrast dimmed sage gray text
+val BorderColor = Color(0xFF1B2620) // Clean structured dark borders
 
 val Purple80 = Color(0xFF80DEEA)
 val PurpleGrey80 = Color(0xFFB2DFDB)
