@@ -18,7 +18,13 @@ import com.example.BuildConfig
 @JsonClass(generateAdapter = true)
 data class GenerateContentRequest(
     @Json(name = "contents") val contents: List<Content>,
-    @Json(name = "systemInstruction") val systemInstruction: Content? = null
+    @Json(name = "systemInstruction") val systemInstruction: Content? = null,
+    @Json(name = "generationConfig") val generationConfig: GenerationConfig? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class GenerationConfig(
+    @Json(name = "responseMimeType") val responseMimeType: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -99,7 +105,8 @@ object GeminiApiClient {
 
         val request = GenerateContentRequest(
             contents = contents,
-            systemInstruction = systemInstruction
+            systemInstruction = systemInstruction,
+            generationConfig = GenerationConfig(responseMimeType = "application/json")
         )
 
         return try {

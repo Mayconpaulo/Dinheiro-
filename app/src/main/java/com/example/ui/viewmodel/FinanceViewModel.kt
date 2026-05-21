@@ -13,6 +13,26 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import com.squareup.moshi.Json
+import com.squareup.moshi.JsonClass
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+
+@JsonClass(generateAdapter = true)
+data class ChatbotJsonResponse(
+    @Json(name = "reply") val reply: String,
+    @Json(name = "action") val action: ChatbotAction? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class ChatbotAction(
+    @Json(name = "name") val name: String,
+    @Json(name = "type") val type: String = "gasto",
+    @Json(name = "amount") val amount: Double = 0.0,
+    @Json(name = "category") val category: String = "Outros",
+    @Json(name = "expenseType") val expenseType: String = "variavel",
+    @Json(name = "bankOrNote") val bankOrNote: String = ""
+)
 
 data class ChatMessage(
     val text: String,
@@ -153,6 +173,37 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(userProfileImageUri = uriString) }
     }
 
+    fun getCategoryLimit(categoryName: String): Double? {
+        val limit = sharedPrefs.getFloat("category_limit_${categoryName.lowercase().trim()}", -1f)
+        return if (limit >= 0f) limit.toDouble() else null
+    }
+
+    fun setCategoryLimit(categoryName: String, limit: Double?) {
+        val cleanName = categoryName.lowercase().trim()
+        if (limit == null) {
+            sharedPrefs.edit().remove("category_limit_$cleanName").apply()
+        } else {
+            sharedPrefs.edit().putFloat("category_limit_$cleanName", limit.toFloat()).apply()
+        }
+        // Force state update to notify listeners
+        _uiState.update { it.copy(categories = it.categories.toList()) }
+    }
+
+    fun getCategoryCustomImage(categoryName: String): String? {
+        return sharedPrefs.getString("category_image_${categoryName.lowercase().trim()}", null)
+    }
+
+    fun setCategoryCustomImage(categoryName: String, imagePath: String?) {
+        val cleanName = categoryName.lowercase().trim()
+        if (imagePath == null) {
+            sharedPrefs.edit().remove("category_image_$cleanName").apply()
+        } else {
+            sharedPrefs.edit().putString("category_image_$cleanName", imagePath).apply()
+        }
+        // Force state update to notify listeners
+        _uiState.update { it.copy(categories = it.categories.toList()) }
+    }
+
     fun addCategory(category: String) {
         val trimmed = category.trim()
         if (trimmed.isEmpty()) return
@@ -277,8 +328,41 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 history = geminiHistory
             )
 
+            var replyText = aiResponse
+            try {
+                val cleanJson = aiResponse.trim()
+                    .removePrefix("```json")
+                    .removeSuffix("```")
+                    .trim()
+
+                val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+                val adapter = moshi.adapter(ChatbotJsonResponse::class.java)
+                val responseObj = adapter.fromJson(cleanJson)
+                if (responseObj != null) {
+                    replyText = responseObj.reply
+                    responseObj.action?.let { action ->
+                        addTransaction(
+                            name = action.name.ifBlank { "Gasto por IA" },
+                            type = action.type,
+                            amount = action.amount,
+                            date = System.currentTimeMillis(),
+                            expenseType = action.expenseType,
+                            totalInstallments = if (action.expenseType == "parcelado") 12 else 0,
+                            paidInstallments = 0,
+                            remainingInstallments = if (action.expenseType == "parcelado") 12 else 0,
+                            category = action.category,
+                            bankOrNote = action.bankOrNote
+                        )
+                        addCategory(action.category)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Fallback to raw text if JSON is malformed
+            }
+
             val updatedMessages = _uiState.value.chatbotMessages.toMutableList()
-            updatedMessages.add(ChatMessage(text = aiResponse, isUser = false))
+            updatedMessages.add(ChatMessage(text = replyText, isUser = false))
             _uiState.update { it.copy(chatbotMessages = updatedMessages, isChatLoading = false) }
         }
     }
@@ -429,11 +513,31 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     // --- Helper to formulate a complete summary context for the System prompt ---
     private fun createSystemPromptForGemini(): String {
         val allTx = _uiState.value.transactions
+        val jsonInstruction = """
+            Sua resposta deve ser OBRIGATORIAMENTE um objeto JSON válido contendo duas propriedades:
+            1. "reply": Uma string em português brasileiro com sua resposta/mensagem amigável para o usuário. Se o usuário quiser cadastrar uma transação (como "comprei um salgado de R$ 20 pelo Mercado Pago") e faltarem informações cruciais para você adicioná-la (como o nome, se é gasto ou entrada, o valor, ou a categoria/banco), você deve fazer perguntas simples e inteligentes em "reply" para completar os dados (Exemplo: "É um gasto fixo, variável ou parcelado?") antes de preencher o "action".
+            2. "action": Se você tiver os dados necessários para adicionar a transação, preencha este objeto JSON. Caso contrário (ou se for apenas uma conversa comum/dúvida), "action" deve ser obrigatoriamente null.
+               Estrutura do "action" (todos os campos abaixo são obrigatórios se "action" não for nulo):
+               {
+                 "name": "Breve nome/descritivo do item ou serviço",
+                 "type": "gasto" ou "entrada",
+                 "amount": valor numérico correspondente (Double),
+                 "category": "Nome do banco ou categoria (ex: Mercado Pago, NuBank, Comida, Lazer, etc)",
+                 "expenseType": "fixo", "variavel" ou "parcelado",
+                 "bankOrNote": "Nome do Banco ou observação correspondente"
+               }
+               
+            REGRAS ADICIONAIS IMPORTANTES DE INTERPRETAÇÃO:
+            - Se o usuário disser que fez uma compra no "débito" (ou debito), "PIX", "dinheiro" ou similar, o "expenseType" deve ser obrigatoriamente "variavel" (pois ocorre uma única vez no momento e não é fixo). Não pergunte se é fixo ou parcelado nestes casos!
+            - Se o usuário especificar o banco (ex: "Mercado Pago", "NuBank"), use esse nome exatamente no campo "category" e no campo "bankOrNote".
+        """.trimIndent()
+
         if (allTx.isEmpty()) {
             return """
                 Você é o assistente virtual do FinTrack. O usuário atualmente não possui transações cadastradas.
-                Sua tarefa é recebê-lo de maneira acolhedora, explicar como ele pode cadastrar seus gastos (fixos, variáveis e parcelados) e entradas, e oferecer dicas de finanças pessoais.
-                Responda sempre em português brasileiro de forma amigável, clara e concisa.
+                Sua tarefa é recebê-lo de maneira acolhedora, explicar como ele pode cadastrar seus gastos (fixos, variáveis e parcelados) e entradas por áudio/texto, e oferecer dicas de finanças pessoais.
+                
+                $jsonInstruction
             """.trimIndent()
         }
 
@@ -490,6 +594,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             2. Forneça insights úteis reais! Por exemplo: se um usuário gasta muito em Comida, aponte isso. Se ele tem parcelas acabando nos próximos meses, avise-o! 
             3. Use os dados específicos acima para responder as dúvidas do usuário sobre as finanças dele de forma precisa, sem inventar dados.
             4. Se o usuário perguntar sobre projeções, use a seção de "Projeções Inteligentes dos Próximos Meses" indicada acima para fornecer respostas surpreendentemente precisas e estimulantes!
+            
+            $jsonInstruction
         """.trimIndent()
     }
 }

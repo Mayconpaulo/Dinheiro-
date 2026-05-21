@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -53,34 +58,11 @@ fun Modifier.holdOrClick(
     onHoldStart: () -> Unit,
     onHoldEnd: () -> Unit
 ): Modifier = this.pointerInput(key) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        var releasedBeforeTimeout = false
-        val timeoutResult = withTimeoutOrNull(400L) {
-            while (true) {
-                val event = awaitPointerEvent()
-                if (event.changes.any { !it.pressed }) {
-                    releasedBeforeTimeout = true
-                    break
-                }
-            }
-            true
+    detectTapGestures(
+        onLongPress = {
+            onClick()
         }
-        if (timeoutResult == null) {
-            onHoldStart()
-            while (true) {
-                val event = awaitPointerEvent()
-                if (event.changes.all { !it.pressed }) {
-                    break
-                }
-            }
-            onHoldEnd()
-        } else {
-            if (releasedBeforeTimeout) {
-                onClick()
-            }
-        }
-    }
+    )
 }
 
 fun getCategoryIconAndColor(category: String): Pair<ImageVector, Color> {
@@ -113,6 +95,33 @@ fun DashboardScreen(
     var holdCategoryDetails by remember { mutableStateOf<String?>(null) }
     var clickCategoryDetails by remember { mutableStateOf<String?>(null) }
     val selectedCategoryDetails = holdCategoryDetails ?: clickCategoryDetails
+
+    val context = LocalContext.current
+    var categoryForPhotoPicking by remember { mutableStateOf<String?>(null) }
+
+    val categoryPhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        val cat = categoryForPhotoPicking
+        if (uri != null && cat != null) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val file = java.io.File(context.filesDir, "category_${cat.lowercase().replace(" ", "_").replace("/", "_")}.jpg")
+                val outputStream = java.io.FileOutputStream(file)
+                inputStream?.use { input ->
+                    outputStream.use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                viewModel.setCategoryCustomImage(cat, file.absolutePath)
+                Toast.makeText(context, "Logo da categoria atualizado!", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Erro ao carregar a foto.", Toast.LENGTH_SHORT).show()
+                e.printStackTrace()
+            }
+        }
+        categoryForPhotoPicking = null
+    }
 
     var holdTransactionDetails by remember { mutableStateOf<Transaction?>(null) }
     var clickTransactionDetails by remember { mutableStateOf<Transaction?>(null) }
@@ -527,18 +536,28 @@ fun DashboardScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val customImage = viewModel.getCategoryCustomImage(category)
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(iconAndColor.second.copy(alpha = 0.2f)),
+                                .background(if (customImage == null) iconAndColor.second.copy(alpha = 0.2f) else Color.Transparent),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = iconAndColor.first,
-                                contentDescription = category,
-                                tint = iconAndColor.second
-                            )
+                            if (customImage != null) {
+                                AsyncImage(
+                                    model = java.io.File(customImage),
+                                    contentDescription = category,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = iconAndColor.first,
+                                    contentDescription = category,
+                                    tint = iconAndColor.second
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -731,11 +750,15 @@ fun DashboardScreen(
         val categoryTotal = categoryTxList.sumOf { if (it.type == "gasto") it.amount else 0.0 }
         val categoryIconAndColor = getCategoryIconAndColor(category)
 
+        val creditLimit = viewModel.getCategoryLimit(category)
+        var isEditingLimit by remember(category) { mutableStateOf(false) }
+        var limitInputText by remember(category) { mutableStateOf(creditLimit?.toString() ?: "") }
+
         Dialog(onDismissRequest = { holdCategoryDetails = null; clickCategoryDetails = null }) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
-                    .fillMaxHeight(0.75f)
+                    .fillMaxHeight(0.85f)
                     .border(
                         width = 1.5.dp,
                         brush = Brush.linearGradient(listOf(categoryIconAndColor.second, PrimaryPurple)),
@@ -757,18 +780,34 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val catCustomImg = viewModel.getCategoryCustomImage(category)
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(categoryIconAndColor.second.copy(alpha = 0.2f)),
+                                    .background(if (catCustomImg == null) categoryIconAndColor.second.copy(alpha = 0.2f) else Color.Transparent)
+                                    .clickable {
+                                        categoryForPhotoPicking = category
+                                        categoryPhotoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = categoryIconAndColor.first,
-                                    contentDescription = category,
-                                    tint = categoryIconAndColor.second
-                                )
+                                if (catCustomImg != null) {
+                                    AsyncImage(
+                                        model = java.io.File(catCustomImg),
+                                        contentDescription = category,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = categoryIconAndColor.first,
+                                        contentDescription = category,
+                                        tint = categoryIconAndColor.second
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
@@ -779,9 +818,15 @@ fun DashboardScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Resumo dos Gastos",
+                                    text = "Logo de banco editável",
                                     color = GrayText,
-                                    fontSize = 12.sp
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.clickable {
+                                        categoryForPhotoPicking = category
+                                        categoryPhotoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -808,7 +853,7 @@ fun DashboardScreen(
                             .fillMaxWidth()
                             .background(BorderColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
                             .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
-                            .padding(16.dp)
+                            .padding(14.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -827,6 +872,147 @@ fun DashboardScreen(
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Black
                             )
+                        }
+                    }
+
+                    // --- Credit Limit Box ---
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(14.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                            .padding(14.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CreditCard,
+                                        contentDescription = null,
+                                        tint = PrimaryCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Limite de Crédito",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                if (!isEditingLimit) {
+                                    Text(
+                                        text = "Editar",
+                                        color = PrimaryCyan,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .clickable { isEditingLimit = true }
+                                            .padding(4.dp)
+                                    )
+                                }
+                            }
+
+                            if (isEditingLimit) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = limitInputText,
+                                        onValueChange = { limitInputText = it },
+                                        placeholder = { Text("Valor do limite (ex: 5000)", fontSize = 11.sp, color = GrayText) },
+                                        modifier = Modifier.weight(1f).height(48.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White,
+                                            focusedBorderColor = PrimaryCyan,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                        ),
+                                        singleLine = true
+                                    )
+
+                                    Button(
+                                        onClick = {
+                                            val value = limitInputText.toDoubleOrNull()
+                                            viewModel.setCategoryLimit(category, value)
+                                            isEditingLimit = false
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyan),
+                                        contentPadding = PaddingValues(horizontal = 10.dp),
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Text("Salvar", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Text(
+                                        text = "Cancelar",
+                                        color = GrayText,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.clickable {
+                                            isEditingLimit = false
+                                            limitInputText = creditLimit?.toString() ?: ""
+                                        }
+                                    )
+                                }
+                            } else {
+                                if (creditLimit != null) {
+                                    val spent = categoryTotal
+                                    val remaining = creditLimit - spent
+                                    val pct = if (creditLimit > 0) (spent / creditLimit).coerceIn(0.0, 1.0) else 0.0
+
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Limite: R$ ${"%,.2f".format(creditLimit)}", color = GrayText, fontSize = 11.sp)
+                                            Text("Utilizado: R$ ${"%,.2f".format(spent)}", color = AccentPink, fontSize = 11.sp)
+                                        }
+
+                                        // Progress Bar for Credit Limit
+                                        LinearProgressIndicator(
+                                            progress = { pct.toFloat() },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(6.dp)
+                                                .clip(RoundedCornerShape(3.dp)),
+                                            color = if (pct >= 0.9) AccentPink else PrimaryCyan,
+                                            trackColor = Color.White.copy(alpha = 0.08f)
+                                        )
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = "Disponível: R$ ${"%,.2f".format(remaining)}",
+                                                color = if (remaining >= 0) AccentGreen else AccentPink,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "${(pct * 100).toInt()}% consumido",
+                                                color = GrayText,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Text(
+                                        text = "Nenhum limite cadastrado para esta categoria de gastos / banco. Clique em 'Editar' para definir e controlar seus limites.",
+                                        color = GrayText,
+                                        fontSize = 11.sp,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
                         }
                     }
 
