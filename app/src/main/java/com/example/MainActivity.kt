@@ -39,6 +39,9 @@ import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.SettingsDialog
+import com.example.ui.screens.ProfileDialog
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.CardBackground
 import com.example.ui.theme.DeepBackground
@@ -75,6 +78,7 @@ fun MainContent() {
     var showChatbotPopup by remember { mutableStateOf(false) }
     var showAddTransactionPopup by remember { mutableStateOf(false) }
     var showSettingsPopup by remember { mutableStateOf(false) }
+    var showProfilePopup by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier
@@ -100,19 +104,32 @@ fun MainContent() {
                     LoginScreen(viewModel = viewModel)
                 }
             } else {
-                // 2. Active Screen Content
+                // 2. Active Screen Content with premium gesture swiping support
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
                         .padding(bottom = 76.dp) // Leave correct clearance for the floating islands bar
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures { change, dragAmount ->
+                                change.consume()
+                                if (dragAmount < -35f) {
+                                    // Swipe left -> History Screen
+                                    currentScreen = Screen.History
+                                } else if (dragAmount > 35f) {
+                                    // Swipe right -> Dashboard Screen
+                                    currentScreen = Screen.Dashboard
+                                }
+                            }
+                        }
                 ) {
                     when (currentScreen) {
                         Screen.Dashboard -> {
                             DashboardScreen(
                                 viewModel = viewModel,
                                 onNavigateToAdd = { showAddTransactionPopup = true },
-                                onOpenSettings = { showSettingsPopup = true }
+                                onOpenSettings = { showSettingsPopup = true },
+                                onOpenProfile = { showProfilePopup = true }
                             )
                         }
                         Screen.History -> {
@@ -331,14 +348,14 @@ fun MainContent() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f))
-                    .padding(horizontal = 16.dp, vertical = 40.dp),
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
+                        .fillMaxWidth(0.92f)
+                        .fillMaxHeight(0.75f)
                         .border(
                             width = 1.5.dp,
                             brush = Brush.linearGradient(
@@ -346,7 +363,7 @@ fun MainContent() {
                             ),
                             shape = RoundedCornerShape(24.dp)
                         ),
-                    colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.9f)),
+                    colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.92f)),
                     shape = RoundedCornerShape(24.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -373,14 +390,14 @@ fun MainContent() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f))
-                    .padding(horizontal = 16.dp, vertical = 40.dp),
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
+                        .fillMaxWidth(0.92f)
+                        .fillMaxHeight(0.78f)
                         .border(
                             width = 1.5.dp,
                             brush = Brush.linearGradient(
@@ -388,7 +405,7 @@ fun MainContent() {
                             ),
                             shape = RoundedCornerShape(24.dp)
                         ),
-                    colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.9f)),
+                    colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.92f)),
                     shape = RoundedCornerShape(24.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -410,6 +427,14 @@ fun MainContent() {
         SettingsDialog(
             viewModel = viewModel,
             onDismiss = { showSettingsPopup = false }
+        )
+    }
+
+    // Modal Holographic Profile Overlay Dialog
+    if (showProfilePopup) {
+        ProfileDialog(
+            viewModel = viewModel,
+            onDismiss = { showProfilePopup = false }
         )
     }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "FinTrack",
+  "name": "Money Control",
   "description": "Gestão financeira inteligente com chatbot de insights e projeções.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

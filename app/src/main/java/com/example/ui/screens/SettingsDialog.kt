@@ -63,14 +63,14 @@ fun SettingsDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.85f))
-                .padding(horizontal = 16.dp, vertical = 24.dp),
+                .background(Color.Black.copy(alpha = 0.6f))
+                .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
+                    .fillMaxWidth(0.85f)
+                    .fillMaxHeight(0.6f) // Occupies 60% of the screen height centered
                     .border(
                         width = 1.5.dp,
                         brush = Brush.linearGradient(
@@ -78,15 +78,15 @@ fun SettingsDialog(
                         ),
                         shape = RoundedCornerShape(24.dp)
                     ),
-                colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.92f)),
+                colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.95f)),
                 shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp)
+                        .padding(18.dp)
                 ) {
-                    // Header with Close trigger
+                    // Header with Close
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -94,14 +94,14 @@ fun SettingsDialog(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.Settings,
+                                imageVector = Icons.Default.Notifications,
                                 contentDescription = null,
                                 tint = PrimaryCyan,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Configurações Globais",
+                                text = "Notificações",
                                 color = Color.White,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold
@@ -114,276 +114,163 @@ fun SettingsDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Fechar configurações",
+                                contentDescription = "Fechar",
                                 tint = Color.White
                             )
                         }
                     }
 
-                    Divider(
+                    HorizontalDivider(
                         color = Color.White.copy(alpha = 0.08f),
                         thickness = 1.dp,
-                        modifier = Modifier.padding(vertical = 12.dp)
+                        modifier = Modifier.padding(vertical = 10.dp)
                     )
 
-                    // Scrollable Settable Fields
+                    // Scrollable Notification Settings Fields (Occupying remaining space)
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .verticalScroll(scrollState),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // SECTION 1: USER ACCOUNT & CLOUD STATUS
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color.White.copy(alpha = 0.03f))
-                                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-                                .padding(14.dp)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = "CONTA EM NUVEM",
-                                    color = PrimaryCyan,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp
-                                )
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(CircleShape)
-                                            .background(PrimaryCyan.copy(alpha = 0.15f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Person,
-                                            contentDescription = null,
-                                            tint = PrimaryCyan,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = uiState.userName,
-                                            color = Color.White,
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = uiState.userEmail,
-                                            color = GrayText,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.padding(top = 4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Sync,
-                                        contentDescription = null,
-                                        tint = AccentPink,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(
-                                        text = "Conectado. Sincronização computadores e celulares ativa.",
-                                        color = AccentPink,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                            }
-                        }
-
-                        // SECTION 2: DAILY NOTIFICATION REMINDERS
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color.White.copy(alpha = 0.03f))
-                                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-                                .padding(14.dp)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "LEMBRETE DIÁRIO DE GASTOS",
-                                        color = PrimaryCyan,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 1.sp
-                                    )
-
-                                    Switch(
-                                        checked = uiState.isReminderEnabled,
-                                        onCheckedChange = { viewModel.toggleReminder(it) },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = DeepBackground,
-                                            checkedTrackColor = PrimaryCyan,
-                                            uncheckedThumbColor = GrayText,
-                                            uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
-                                        )
-                                    )
-                                }
-
-                                Text(
-                                    text = "Configure o horário fixo para receber notificações diárias lembrando de relacionar seus gastos recentes.",
-                                    color = GrayText,
-                                    fontSize = 12.sp
-                                )
-
-                                // Time Picker Incrementor
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Color.White.copy(alpha = 0.05f))
-                                        .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "Horário de Alerta:",
-                                        color = Color.White,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        // HOUR
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(
-                                                onClick = {
-                                                    hSelector = if (hSelector == 0) 23 else hSelector - 1
-                                                    viewModel.updateReminderTime(hSelector, mSelector)
-                                                },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(Icons.Default.Remove, "Diminuir hora", tint = PrimaryCyan, modifier = Modifier.size(16.dp))
-                                            }
-                                            Text(
-                                                text = String.format("%02d", hSelector),
-                                                color = Color.White,
-                                                fontSize = 16.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 4.dp)
-                                            )
-                                            IconButton(
-                                                onClick = {
-                                                    hSelector = if (hSelector == 23) 0 else hSelector + 1
-                                                    viewModel.updateReminderTime(hSelector, mSelector)
-                                                },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(Icons.Default.Add, "Aumentar hora", tint = PrimaryCyan, modifier = Modifier.size(16.dp))
-                                            }
-                                        }
-
-                                        Text(text = ":", color = Color.White, fontWeight = FontWeight.Bold)
-
-                                        // MINUTES
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(
-                                                onClick = {
-                                                    mSelector = if (mSelector == 0) 45 else if (mSelector % 15 == 0) mSelector - 15 else (mSelector / 15) * 15
-                                                    if (mSelector < 0) mSelector = 45
-                                                    viewModel.updateReminderTime(hSelector, mSelector)
-                                                },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(Icons.Default.Remove, "Diminuir minuto", tint = PrimaryCyan, modifier = Modifier.size(16.dp))
-                                            }
-                                            Text(
-                                                text = String.format("%02d", mSelector),
-                                                color = Color.White,
-                                                fontSize = 16.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 4.dp)
-                                            )
-                                            IconButton(
-                                                onClick = {
-                                                    mSelector = if (mSelector == 45) 0 else (mSelector / 15 + 1) * 15
-                                                    if (mSelector > 45) mSelector = 0
-                                                    viewModel.updateReminderTime(hSelector, mSelector)
-                                                },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(Icons.Default.Add, "Aumentar minuto", tint = PrimaryCyan, modifier = Modifier.size(16.dp))
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Interactive local trigger to preview standard notification
-                                Button(
-                                    onClick = {
-                                        triggerLocalReminderNotification(context, hSelector, mSelector)
-                                        Toast.makeText(context, "Lembrete enviado ao sistema!", Toast.LENGTH_SHORT).show()
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.08f)),
-                                    border = BorderStroke(1.dp, PrimaryCyan.copy(alpha = 0.3f)),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(38.dp)
-                                        .testTag("preview_notification_button")
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = PrimaryCyan, modifier = Modifier.size(14.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Testar Notificação Agora", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Divider(
-                        color = Color.White.copy(alpha = 0.08f),
-                        thickness = 1.dp,
-                        modifier = Modifier.padding(vertical = 12.dp)
-                    )
-
-                    // Logout / Sair
-                    Button(
-                        onClick = {
-                            viewModel.logoutUser()
-                            onDismiss()
-                            Toast.makeText(context, "Logout efetuado com sucesso.", Toast.LENGTH_SHORT).show()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F).copy(alpha = 0.15f)),
-                        border = BorderStroke(1.dp, Color(0xFFD32F2F).copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp)
-                            .testTag("settings_logout_button")
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.ExitToApp, contentDescription = null, tint = Color(0xFFFF5252), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Sair da Conta (Logout)", color = Color(0xFFFF8A80), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "LEMBRETE DIÁRIO",
+                                color = PrimaryCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+
+                            Switch(
+                                checked = uiState.isReminderEnabled,
+                                onCheckedChange = { viewModel.toggleReminder(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = DeepBackground,
+                                    checkedTrackColor = PrimaryCyan,
+                                    uncheckedThumbColor = GrayText,
+                                    uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
+                                )
+                            )
+                        }
+
+                        Text(
+                            text = "Configure o horário fixo para receber lembretes de controle financeiro diários.",
+                            color = GrayText,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+
+                        // Time Select Row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.04f))
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Horário:",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                // Hour selection
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            hSelector = if (hSelector == 0) 23 else hSelector - 1
+                                            viewModel.updateReminderTime(hSelector, mSelector)
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Remove, "menos hora", tint = PrimaryCyan, modifier = Modifier.size(16.dp))
+                                    }
+                                    Text(
+                                        text = String.format("%02d", hSelector),
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 2.dp)
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            hSelector = if (hSelector == 23) 0 else hSelector + 1
+                                            viewModel.updateReminderTime(hSelector, mSelector)
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, "mais hora", tint = PrimaryCyan, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+
+                                Text(text = ":", color = Color.White, fontWeight = FontWeight.Bold)
+
+                                // Minutes selection
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            mSelector = if (mSelector == 0) 45 else if (mSelector % 15 == 0) mSelector - 15 else (mSelector / 15) * 15
+                                            if (mSelector < 0) mSelector = 45
+                                            viewModel.updateReminderTime(hSelector, mSelector)
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Remove, "menos minuto", tint = PrimaryCyan, modifier = Modifier.size(16.dp))
+                                    }
+                                    Text(
+                                        text = String.format("%02d", mSelector),
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 2.dp)
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            mSelector = if (mSelector == 45) 0 else (mSelector / 15 + 1) * 15
+                                            if (mSelector > 45) mSelector = 0
+                                            viewModel.updateReminderTime(hSelector, mSelector)
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, "mais minuto", tint = PrimaryCyan, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        // Test notification CTA
+                        Button(
+                            onClick = {
+                                triggerLocalReminderNotification(context, hSelector, mSelector)
+                                Toast.makeText(context, "Lembrete de teste acionado!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.08f)),
+                            border = BorderStroke(1.dp, PrimaryCyan.copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp)
+                                .testTag("preview_notification_button")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = PrimaryCyan, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Testar Notificação Agora", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -392,20 +279,17 @@ fun SettingsDialog(
     }
 }
 
-/**
- * Builds and sends a real standard Android push notification to represent daily spending reminders.
- */
 fun triggerLocalReminderNotification(context: Context, hour: Int, minute: Int) {
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    val channelId = "fintrack_lembrete_canal"
+    val channelId = "moneycontrol_reminder_channel"
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         val channel = NotificationChannel(
             channelId,
-            "Lembretes de Gastos Diário",
+            "Lembrete Diário Money Control",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Lembrete customizado do FinTrack"
+            description = "Lembrete diário personalizado de controle"
             enableLights(true)
             lightColor = android.graphics.Color.GREEN
         }
@@ -423,13 +307,11 @@ fun triggerLocalReminderNotification(context: Context, hour: Int, minute: Int) {
     )
 
     val timeFormatted = String.format("%02d:%02d", hour, minute)
-    
-    // The exact message requested in the prompt!
-    val body = "Ei, vamos relacionar os gastos ou já relacionou os gastos hoje? (Lembrete configurado para as $timeFormatted)"
+    val body = "Ei, vamos relacionar os gastos ou já relacionou os gastos hoje? (Lembrete das $timeFormatted)"
 
     val builder = NotificationCompat.Builder(context, channelId)
         .setSmallIcon(android.R.drawable.ic_popup_reminder)
-        .setContentTitle("FinTrack — Lembrete de Gastos")
+        .setContentTitle("Money Control — Lembrete de Gastos")
         .setContentText(body)
         .setStyle(NotificationCompat.BigTextStyle().bigText(body))
         .setPriority(NotificationCompat.PRIORITY_HIGH)

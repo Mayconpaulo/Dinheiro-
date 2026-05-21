@@ -3,7 +3,10 @@ package com.example.ui.screens
 import android.app.DatePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -11,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
@@ -57,20 +61,47 @@ fun AddTransactionScreen(
     var paidInstallmentsStr by remember { mutableStateOf("0") }
 
     // Category and Custom bank fields
-    var categoryText by remember { mutableStateOf("Comida") }
+    val uiState by viewModel.uiState.collectAsState()
+    val categories = uiState.categories
+
+    var categoryText by remember { mutableStateOf("") }
+    
+    // Auto preset first available category
+    LaunchedEffect(categories, transactionType) {
+        if (categoryText.isBlank() || !categories.contains(categoryText)) {
+            if (transactionType == "gasto") {
+                val hasComida = categories.any { it.equals("Comida", ignoreCase = true) }
+                categoryText = if (hasComida) {
+                    categories.first { it.equals("Comida", ignoreCase = true) }
+                } else if (categories.isNotEmpty()) {
+                    categories.first()
+                } else {
+                    ""
+                }
+            } else {
+                val hasSalario = categories.any { it.equals("Salário", ignoreCase = true) || it.equals("Salario", ignoreCase = true) }
+                categoryText = if (hasSalario) {
+                    categories.first { it.equals("Salário", ignoreCase = true) || it.equals("Salario", ignoreCase = true) }
+                } else if (categories.isNotEmpty()) {
+                    categories.first()
+                } else {
+                    ""
+                }
+            }
+        }
+    }
+
     var bankOrNoteText by remember { mutableStateOf("") }
+
+    // Dynamic Category States
+    var showAddCategoryDialog by remember { mutableStateOf(false) }
+    var newCategoryInput by remember { mutableStateOf("") }
+    var selectedCategoryForAction by remember { mutableStateOf<String?>(null) }
 
     // Validation
     var validationError by remember { mutableStateOf<String?>(null) }
 
     val dateFormater = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-
-    // Quick pick lists
-    val categories = if (transactionType == "gasto") {
-        listOf("Comida", "Lazer", "Moradia", "Transporte", "Saúde", "Educação")
-    } else {
-        listOf("Salário", "Investimento", "Reembolso", "Outros")
-    }
 
     Column(
         modifier = modifier
@@ -427,84 +458,104 @@ fun AddTransactionScreen(
             }
         }
 
-        // --- Category Selection (Fully editable as requested!) ---
-        Text(
-            text = "Categoria (Customizada / Editável)",
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        // Show horizontal row of quick-pick choices
+        // --- Category Selection (Dynamic, fully manageable as requested!) ---
         Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Categorias",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            // Little plus button to add a category
+            IconButton(
+                onClick = { showAddCategoryDialog = true },
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(PrimaryCyan.copy(alpha = 0.15f))
+                    .testTag("add_category_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Adicionar categoria",
+                    tint = PrimaryCyan,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        // Horizontal pill selector for categories
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(CardBackground)
+                .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                .padding(10.dp)
         ) {
-            categories.take(4).forEach { cat ->
-                val isSelected = categoryText.equals(cat, ignoreCase = true)
-                Box(
+            if (categories.isEmpty()) {
+                Text(
+                    text = "Nenhuma categoria. Clique no '+' acima para cadastrar!",
+                    color = GrayText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            } else {
+                Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (isSelected) PrimaryCyan.copy(alpha = 0.2f) else CardBackground)
-                        .clickable { categoryText = cat }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = cat,
-                        color = if (isSelected) PrimaryCyan else Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    categories.forEach { cat ->
+                        val isSelected = categoryText.equals(cat, ignoreCase = true)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (isSelected) PrimaryCyan.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.03f))
+                                .border(
+                                    width = if (isSelected) 1.dp else 0.dp,
+                                    color = if (isSelected) PrimaryCyan else Color.Transparent,
+                                    shape = RoundedCornerShape(14.dp)
+                                )
+                                .clickable {
+                                    // Set up active selection trigger
+                                    selectedCategoryForAction = cat
+                                }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = cat,
+                                color = if (isSelected) PrimaryCyan else Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                 }
             }
         }
 
         OutlinedTextField(
-            value = categoryText,
-            onValueChange = { categoryText = it },
-            placeholder = { Text("Digite ou escolha a categoria") },
+            value = if (categoryText.isBlank()) "Escolha acima ou crie uma categoria" else categoryText,
+            onValueChange = {},
+            readOnly = true,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("category_input"),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = PrimaryCyan,
+                focusedBorderColor = BorderColor,
                 unfocusedBorderColor = BorderColor,
                 focusedContainerColor = CardBackground,
                 unfocusedContainerColor = CardBackground,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedPlaceholderColor = GrayText,
-                unfocusedPlaceholderColor = GrayText
-            ),
-            shape = RoundedCornerShape(12.dp),
-            singleLine = true
-        )
-
-        // --- Customizable Bank / Bank platform / Notes ("posso colocar o banco, coisas assim") ---
-        Text(
-            text = "Banco / Notas de Entrada (Customizado / Editável)",
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
-        OutlinedTextField(
-            value = bankOrNoteText,
-            onValueChange = { bankOrNoteText = it },
-            placeholder = { Text("Ex: Nubank, Banco do Brasil, Dinheiro, etc.") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("bank_input"),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = PrimaryCyan,
-                unfocusedBorderColor = BorderColor,
-                focusedContainerColor = CardBackground,
-                unfocusedContainerColor = CardBackground,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedPlaceholderColor = GrayText,
-                unfocusedPlaceholderColor = GrayText
+                focusedTextColor = if (categoryText.isBlank()) GrayText else Color.White,
+                unfocusedTextColor = if (categoryText.isBlank()) GrayText else Color.White
             ),
             shape = RoundedCornerShape(12.dp),
             singleLine = true
@@ -549,7 +600,7 @@ fun AddTransactionScreen(
                         paidInstallments = if (transactionType == "gasto" && expenseType == "parcelado") paidInst else 0,
                         remainingInstallments = if (transactionType == "gasto" && expenseType == "parcelado") remainingInst else 0,
                         category = categoryText.trim(),
-                        bankOrNote = bankOrNoteText.trim()
+                        bankOrNote = "" // Bank unified under categories as requested
                     )
 
                     onTransactionSaved()
@@ -567,17 +618,163 @@ fun AddTransactionScreen(
             Icon(
                 imageVector = Icons.Default.CheckCircle,
                 contentDescription = "Salvar",
-                tint = if (transactionType == "entrada") Color.Black else Color.White
+                tint = Color.Black // Rich readable contrasting color instead of white!
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Salvar Transação",
-                color = if (transactionType == "entrada") Color.Black else Color.White,
+                color = Color.Black, // Rich readable black text
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp
             )
         }
 
         Spacer(modifier = Modifier.height(30.dp))
+    }
+
+    // --- Dynamic Category Management Dialogs ---
+    if (showAddCategoryDialog) {
+        Dialog(
+            onDismissRequest = { showAddCategoryDialog = false }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .wrapContentHeight()
+                    .border(1.5.dp, PrimaryCyan, RoundedCornerShape(20.dp)),
+                colors = CardDefaults.cardColors(containerColor = CardBackground),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        text = "Nova Categoria",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    OutlinedTextField(
+                        value = newCategoryInput,
+                        onValueChange = { newCategoryInput = it },
+                        placeholder = { Text("Ex: Nubank, Mercado Pago, Restaurante") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("new_category_dialog_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = PrimaryCyan,
+                            unfocusedBorderColor = BorderColor,
+                            focusedContainerColor = CardBackground,
+                            unfocusedContainerColor = CardBackground
+                        ),
+                        singleLine = true
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { showAddCategoryDialog = false }) {
+                            Text("Cancelar", color = GrayText)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val trimmed = newCategoryInput.trim()
+                                if (trimmed.isNotEmpty()) {
+                                    viewModel.addCategory(trimmed)
+                                    categoryText = trimmed
+                                    newCategoryInput = ""
+                                    showAddCategoryDialog = false
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyan)
+                        ) {
+                            Text("Adicionar", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (selectedCategoryForAction != null) {
+        val cat = selectedCategoryForAction!!
+        Dialog(
+            onDismissRequest = { selectedCategoryForAction = null }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .wrapContentHeight()
+                    .border(1.5.dp, PrimaryCyan, RoundedCornerShape(20.dp)),
+                colors = CardDefaults.cardColors(containerColor = CardBackground),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Categoria: $cat",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Text(
+                        text = "Escolha se quer selecionar esta categoria para a transação atual ou excluí-la de suas opções futuras.",
+                        color = GrayText,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 16.sp
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // EXCLUDE BUTTON
+                        Button(
+                            onClick = {
+                                viewModel.deleteCategory(cat)
+                                if (categoryText.equals(cat, ignoreCase = true)) {
+                                    categoryText = ""
+                                }
+                                selectedCategoryForAction = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F).copy(alpha = 0.2f)),
+                            border = BorderStroke(1.dp, Color(0xFFD32F2F).copy(alpha = 0.5f))
+                        ) {
+                            Text("Excluir", color = Color(0xFFFF8A80), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // SELECT BUTTON
+                        Button(
+                            onClick = {
+                                categoryText = cat
+                                selectedCategoryForAction = null
+                            },
+                            modifier = Modifier.weight(1.2f),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyan)
+                        ) {
+                            Text("Selecionar", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    TextButton(onClick = { selectedCategoryForAction = null }) {
+                        Text("Cancelar", color = GrayText, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
     }
 }

@@ -42,6 +42,7 @@ fun DashboardScreen(
     viewModel: FinanceViewModel,
     onNavigateToAdd: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -69,7 +70,7 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { onOpenSettings() }
+                        .clickable { onOpenProfile() }
                         .padding(4.dp)
                 ) {
                     Box(
@@ -79,11 +80,9 @@ fun DashboardScreen(
                             .background(Brush.linearGradient(listOf(PrimaryCyan, PrimaryPurple, AccentPink))),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Avatar do Usuário",
-                            tint = Color.Black,
-                            modifier = Modifier.size(24.dp)
+                        Text(
+                            text = uiState.userAvatar.ifBlank { "👤" },
+                            fontSize = 24.sp
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
@@ -92,8 +91,10 @@ fun DashboardScreen(
                         Text(
                             text = "Olá, $displayName",
                             color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -103,13 +104,13 @@ fun DashboardScreen(
                                 modifier = Modifier
                                     .size(6.dp)
                                     .clip(CircleShape)
-                                    .background(PrimaryCyan)
+                                    .background(AccentGreen)
                             )
                             Text(
-                                text = "Nuvem Sincronizada",
-                                color = GrayText,
+                                text = "Google Sincronizado",
+                                color = AccentGreen,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }

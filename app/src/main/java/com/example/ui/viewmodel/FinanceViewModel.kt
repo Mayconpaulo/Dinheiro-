@@ -35,7 +35,9 @@ data class FinanceUiState(
     val userName: String = "",
     val reminderHour: Int = 19,
     val reminderMinute: Int = 0,
-    val isReminderEnabled: Boolean = true
+    val isReminderEnabled: Boolean = true,
+    val categories: List<String> = emptyList(),
+    val userAvatar: String = "👤"
 )
 
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
@@ -57,6 +59,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val dHour = sharedPrefs.getInt("reminder_hour", 19)
         val dMin = sharedPrefs.getInt("reminder_minute", 0)
         val isRemEnabled = sharedPrefs.getBoolean("reminder_enabled", true)
+        val avatar = sharedPrefs.getString("user_avatar", "👤") ?: "👤"
+        
+        val defaultCats = setOf("Comida", "Lazer", "Moradia", "Transporte", "Saúde", "Educação", "Salário", "Investimento", "Reembolso", "Outros")
+        val catsSet = sharedPrefs.getStringSet("custom_categories", defaultCats) ?: defaultCats
+        val catsList = catsSet.toList().sorted()
 
         _uiState.update { 
             it.copy(
@@ -65,7 +72,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 userName = name,
                 reminderHour = dHour,
                 reminderMinute = dMin,
-                isReminderEnabled = isRemEnabled
+                isReminderEnabled = isRemEnabled,
+                userAvatar = avatar,
+                categories = catsList
             )
         }
 
@@ -109,6 +118,45 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 userEmail = "",
                 userName = ""
             )
+        }
+    }
+
+    fun updateProfile(name: String, avatar: String) {
+        val cleanName = if (name.isBlank()) "Usuário Money Control" else name
+        sharedPrefs.edit()
+            .putString("user_name", cleanName)
+            .putString("user_avatar", avatar)
+            .apply()
+
+        _uiState.update { 
+            it.copy(
+                userName = cleanName,
+                userAvatar = avatar
+            )
+        }
+    }
+
+    fun addCategory(category: String) {
+        val trimmed = category.trim()
+        if (trimmed.isEmpty()) return
+        val defaultCats = setOf("Comida", "Lazer", "Moradia", "Transporte", "Saúde", "Educação", "Salário", "Investimento", "Reembolso", "Outros")
+        val currentSet = sharedPrefs.getStringSet("custom_categories", defaultCats)?.toMutableSet() ?: defaultCats.toMutableSet()
+        if (!currentSet.any { it.equals(trimmed, ignoreCase = true) }) {
+            currentSet.add(trimmed)
+            sharedPrefs.edit().putStringSet("custom_categories", currentSet).apply()
+            _uiState.update { 
+                it.copy(categories = currentSet.toList().sorted())
+            }
+        }
+    }
+
+    fun deleteCategory(category: String) {
+        val defaultCats = setOf("Comida", "Lazer", "Moradia", "Transporte", "Saúde", "Educação", "Salário", "Investimento", "Reembolso", "Outros")
+        val currentSet = sharedPrefs.getStringSet("custom_categories", defaultCats)?.toMutableSet() ?: defaultCats.toMutableSet()
+        currentSet.removeAll { it.equals(category, ignoreCase = true) }
+        sharedPrefs.edit().putStringSet("custom_categories", currentSet).apply()
+        _uiState.update { 
+            it.copy(categories = currentSet.toList().sorted())
         }
     }
 
