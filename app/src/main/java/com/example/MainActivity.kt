@@ -522,7 +522,7 @@ fun AmbientGlowingBackground() {
         if (width <= 0f || height <= 0f) return@Canvas
 
         // Draw deep pure dark base layer
-        drawRect(color = Color(0xFF030305))
+        drawRect(color = DeepBackground)
 
         // Orb 1: Futuristic Cyan light
         val center1 = Offset(

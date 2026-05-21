@@ -258,8 +258,9 @@ fun AddTransactionScreen(
                         BasicTextField(
                             value = amountStr,
                             onValueChange = { newValue ->
-                                if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
-                                    amountStr = newValue
+                                val normalized = newValue.replace(',', '.')
+                                if (normalized.isEmpty() || normalized.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                                    amountStr = normalized
                                 }
                             },
                             textStyle = LocalTextStyle.current.copy(

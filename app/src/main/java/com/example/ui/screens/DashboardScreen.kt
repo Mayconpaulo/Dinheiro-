@@ -59,6 +59,9 @@ fun Modifier.holdOrClick(
     onHoldEnd: () -> Unit
 ): Modifier = this.pointerInput(key) {
     detectTapGestures(
+        onTap = {
+            onClick()
+        },
         onLongPress = {
             onClick()
         }

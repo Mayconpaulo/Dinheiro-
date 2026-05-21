@@ -2,20 +2,20 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val PrimaryCyan = Color(0xFF00FFCC) // True high-contrast Neon Cyan/Green-teal
-val PrimaryPurple = Color(0xFFD3A4FF) // Beautiful Radiant Lavender
-val DeepBackground = Color(0xFF030504) // Deep AMOLED pitch black substrate
-val CardBackground = Color(0xFF0E1310) // Dark Slate matte card surface
-val AccentPink = Color(0xFFFF3366) // Vibrant Crimson Rose-pink (replaces unreadable beige)
-val AccentGreen = Color(0xFF00E676) // Bright, beautiful emerald green
-val GrayText = Color(0xFF9EAEA2) // High contrast dimmed sage gray text
-val BorderColor = Color(0xFF1B2620) // Clean structured dark borders
+val PrimaryCyan = Color(0xFF00FF8C) // Reflective high-gloss neon chrome green
+val PrimaryPurple = Color(0xFF00A352) // Lustrous jade/emerald green
+val DeepBackground = Color(0xFF010603) // AMOLED-like deep obsidian-green substrate
+val CardBackground = Color(0xFF09170E) // Metallic matte-gloss slate green card base
+val AccentPink = Color(0xFFFF4560) // High-contrast copper-pink/crimson specifically for gastos
+val AccentGreen = Color(0xFF00FFA6) // High-shine brilliant fluorescent green for entradas
+val GrayText = Color(0xFF86A090) // High-contrast metallic-tinted sage text
+val BorderColor = Color(0xFF143021) // Highly-polished chrome green border
 
-val Purple80 = Color(0xFF80DEEA)
+val Purple80 = Color(0xFF80FAEA)
 val PurpleGrey80 = Color(0xFFB2DFDB)
-val Pink80 = Color(0xFFFF8A80)
+val Pink80 = Color(0xFF80FFC0)
 
-val Purple40 = Color(0xFF00838F)
+val Purple40 = Color(0xFF00897B)
 val PurpleGrey40 = Color(0xFF004D40)
-val Pink40 = Color(0xFFC62828)
+val Pink40 = Color(0xFF00796B)
 
