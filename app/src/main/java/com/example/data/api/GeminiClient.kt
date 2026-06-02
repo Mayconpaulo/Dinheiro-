@@ -114,7 +114,7 @@ object GeminiApiClient {
             response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text 
                 ?: "Desculpe, não consegui gerar uma resposta."
         } catch (e: Exception) {
-            "Erro ao falar com o assistente inteligente: ${e.localizedMessage ?: "Ocorreu um problema de conexão."}"
+            "Erro ao falar com o assistente inteligente: ${e.localizedMessage ?: "Ocorreu um problema de conexão."} (Detalhe técnico: ${e.javaClass.simpleName} - ${e.message})"
         }
     }
 }

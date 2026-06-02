@@ -298,6 +298,26 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun toggleTransactionPaid(transaction: Transaction) {
+        viewModelScope.launch {
+            val updated = transaction.copy(isPaid = !transaction.isPaid)
+            repository.update(updated)
+        }
+    }
+
+    fun toggleCategoryPaid(categoryName: String, isPaid: Boolean) {
+        viewModelScope.launch {
+            val allTx = _uiState.value.transactions
+            allTx.forEach { tx ->
+                if (tx.category.equals(categoryName, ignoreCase = true) && tx.type == "gasto") {
+                    if (tx.isPaid != isPaid) {
+                        repository.update(tx.copy(isPaid = isPaid))
+                    }
+                }
+            }
+        }
+    }
+
     fun setMonthOffset(offset: Int) {
         _uiState.update { it.copy(selectedMonthOffset = offset) }
     }
@@ -396,6 +416,28 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
      * offset = N is Current Month + N.
      */
     fun getProjectionsForMonthOffset(offset: Int): MonthlyMetrics {
+        // To compute carryover of positive balances from past months, we calculate month-by-month
+        // starting from offset -12 up to the requested offset.
+        var carryOver = 0.0
+        val startOffset = -12
+        
+        var currentMetrics = getBaseProjectionsForMonthOffset(startOffset, 0.0)
+        if (startOffset < offset) {
+            for (off in (startOffset + 1)..offset) {
+                // The previous month's positive balance gets carried over
+                val prevBalance = currentMetrics.balance
+                carryOver = if (prevBalance > 0) prevBalance else 0.0
+                currentMetrics = getBaseProjectionsForMonthOffset(off, carryOver)
+            }
+        } else if (offset < startOffset) {
+            // Fallback for offsets smaller than startOffset
+            currentMetrics = getBaseProjectionsForMonthOffset(offset, 0.0)
+        }
+        
+        return currentMetrics
+    }
+
+    private fun getBaseProjectionsForMonthOffset(offset: Int, carryOver: Double): MonthlyMetrics {
         val calendar = Calendar.getInstance()
         val currentYear = calendar.get(Calendar.YEAR)
         val currentMonth = calendar.get(Calendar.MONTH) // 0-indexed
@@ -408,7 +450,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
         val allTx = _uiState.value.transactions
 
-        var incomeTotal = 0.0
+        var incomeTotal = carryOver
         var expenseTotal = 0.0
 
         val categorySpent = mutableMapOf<String, Double>()
@@ -420,52 +462,50 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             val txMonth = txCal.get(Calendar.MONTH)
 
             if (tx.type == "gasto") {
+                val isTxPaid = tx.isPaid
                 when (tx.expenseType) {
                     "fixo" -> {
                         // Fixed expenses occur in any target month after/on its registration date
                         if (tx.date <= targetCalendar.timeInMillis || (txYear == targetYear && txMonth == targetMonth)) {
-                            expenseTotal += tx.amount
-                            categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
+                            if (!isTxPaid) {
+                                expenseTotal += tx.amount
+                                categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
+                            } else {
+                                if (!categorySpent.containsKey(tx.category)) {
+                                    categorySpent[tx.category] = 0.0
+                                }
+                            }
                             activeTransactions.add(tx)
                         }
                     }
                     "variavel" -> {
-                        // Variable expenses only occur in their actual transaction month, OR we can project
-                        // an average variable cost for future offsets! Let's restrict to its true month for current (offset 0),
-                        // and estimate them (using past average) for future offsets! That's incredibly smart.
-                        if (offset == 0) {
-                            if (txYear == targetYear && txMonth == targetMonth) {
+                        // Variable expenses only occur in their actual transaction month, and show in that target month
+                        if (txYear == targetYear && txMonth == targetMonth) {
+                            if (!isTxPaid) {
                                 expenseTotal += tx.amount
                                 categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
-                                activeTransactions.add(tx)
+                            } else {
+                                if (!categorySpent.containsKey(tx.category)) {
+                                    categorySpent[tx.category] = 0.0
+                                }
                             }
-                        } else {
-                            // If calculating a future month projection (offset > 0), we can estimate variable costs
-                            // by copying variable expenses of the register month to approximate, OR if it's within registration date.
-                            // To be conservative and realistic, we only show variable expenses that matches our current past month behavior or actual ones.
-                            // Let's simply count true occurrences. If the user registers variable expenses, they occur in Month 0.
+                            activeTransactions.add(tx)
                         }
                     }
                     "parcelado" -> {
                         // Installments are smart:
-                        // Find the number of months difference between the transaction register date and target date.
                         val monthDiff = getMonthDifference(tx.date, targetCalendar.timeInMillis)
                         
                         if (monthDiff >= 0) {
-                            // Max installments remaining from the moment it was registered is tx.remainingInstallments (quantas faltam)
-                            // It was registered on tx.date.
-                            // In tx.date month, the user pays installment.
-                            // If monthDiff == 0, is current/origin month. Faltam: tx.remainingInstallments.
-                            // Faltavam 'tx.remainingInstallments' no momento de cadastro.
-                            // So it is active if monthDiff < tx.remainingInstallments.
-                            // E.g., if remainingInstallments is 3 (e.g. faltam 3 parcelas, total 5, pagas 2):
-                            // monthDiff = 0: active (1st remaining)
-                            // monthDiff = 1: active (2nd remaining)
-                            // monthDiff = 2: active (3rd remaining)
-                            // monthDiff = 3: inactive (fully paid!)
                             if (monthDiff < tx.remainingInstallments) {
-                                expenseTotal += tx.amount
-                                categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
+                                if (!isTxPaid) {
+                                    expenseTotal += tx.amount
+                                    categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
+                                } else {
+                                    if (!categorySpent.containsKey(tx.category)) {
+                                        categorySpent[tx.category] = 0.0
+                                    }
+                                }
                                 activeTransactions.add(tx)
                             }
                         }
@@ -474,8 +514,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             } else {
                 // "entrada" (Income)
                 // If it is in the target month OR we can treat it as repeating/salary
-                // Let's assume incomes are standard salaries that keep repeating or occur in target month.
-                // For a robust system, we assume "category" is Salary/Repeating to repeat, or if it is exactly on that month.
                 if (txYear == targetYear && txMonth == targetMonth) {
                     incomeTotal += tx.amount
                     activeTransactions.add(tx)
@@ -493,7 +531,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             expenseTotal = expenseTotal,
             balance = incomeTotal - expenseTotal,
             categoryBreakdown = categorySpent,
-            transactionsForMonth = activeTransactions
+            transactionsForMonth = activeTransactions,
+            carryOver = carryOver
         )
     }
 
@@ -551,7 +590,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
         // Aggregate current context
         val totalIncome = allTx.filter { it.type == "entrada" }.sumOf { it.amount }
-        val totalExpense = allTx.filter { it.type == "gasto" }.sumOf { it.amount }
+        val totalExpense = allTx.filter { it.type == "gasto" && !it.isPaid }.sumOf { it.amount }
         
         val expensesByCategory = allTx.filter { it.type == "gasto" }
             .groupBy { it.category }
@@ -614,5 +653,6 @@ data class MonthlyMetrics(
     val expenseTotal: Double,
     val balance: Double,
     val categoryBreakdown: Map<String, Double>,
-    val transactionsForMonth: List<Transaction>
+    val transactionsForMonth: List<Transaction>,
+    val carryOver: Double = 0.0
 )

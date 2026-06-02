@@ -25,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -59,10 +60,10 @@ fun Modifier.holdOrClick(
     onHoldEnd: () -> Unit
 ): Modifier = this.pointerInput(key) {
     detectTapGestures(
-        onTap = {
-            onClick()
-        },
         onLongPress = {
+            onHoldStart()
+        },
+        onTap = {
             onClick()
         }
     )
@@ -93,12 +94,19 @@ fun DashboardScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
 
+    LaunchedEffect(Unit) {
+        if (uiState.selectedMonthOffset == 0) {
+            scrollState.scrollTo(12 * 220)
+        }
+    }
+
     // Calculated metrics for selected month offset
     val metrics = viewModel.getProjectionsForMonthOffset(uiState.selectedMonthOffset)
 
     var holdCategoryDetails by remember { mutableStateOf<String?>(null) }
     var clickCategoryDetails by remember { mutableStateOf<String?>(null) }
     val selectedCategoryDetails = holdCategoryDetails ?: clickCategoryDetails
+    var mainScreenTypeFilter by remember { mutableStateOf("Todos") }
 
     val context = LocalContext.current
     var categoryForPhotoPicking by remember { mutableStateOf<String?>(null) }
@@ -265,12 +273,16 @@ fun DashboardScreen(
                         .horizontalScroll(scrollState),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    for (offset in 0..5) {
+                    for (offset in -12..12) {
                         val targetCal = Calendar.getInstance().apply { add(Calendar.MONTH, offset) }
                         val monthLabel = SimpleDateFormat("MMM", Locale("pt", "BR"))
                             .format(targetCal.time)
                             .replaceFirstChar { it.uppercase() }
-                        val label = if (offset == 0) "Atual ($monthLabel)" else monthLabel
+                        val label = if (offset == 0) "Atual ($monthLabel)" else {
+                            val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+                            val targetYear = targetCal.get(Calendar.YEAR)
+                            if (targetYear != currentYear) "$monthLabel/$targetYear" else monthLabel
+                        }
                         val isSelected = uiState.selectedMonthOffset == offset
 
                         Box(
@@ -392,22 +404,34 @@ fun DashboardScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.TrendingUp,
-                                contentDescription = "Entradas",
-                                tint = AccentGreen,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (uiState.isValuesHidden) "Entradas: R$ ••••" else "Entradas: R$ ${"%,.2f".format(metrics.incomeTotal)}",
-                                color = AccentGreen,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.TrendingUp,
+                                    contentDescription = "Entradas",
+                                    tint = AccentGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (uiState.isValuesHidden) "Entradas: R$ ••••" else "Entradas: R$ ${"%,.2f".format(metrics.incomeTotal)}",
+                                    color = AccentGreen,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            if (metrics.carryOver > 0 && !uiState.isValuesHidden) {
+                                Text(
+                                    text = "+ R$ ${"%,.2f".format(metrics.carryOver)} (mës anterior)",
+                                    color = GrayText,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(start = 20.dp)
+                                )
+                            }
                         }
 
                         val progressPct = if (metrics.incomeTotal > 0) {
@@ -522,6 +546,9 @@ fun DashboardScreen(
                 val spent = entry.value
                 val pct = if (metrics.expenseTotal > 0) (spent / metrics.expenseTotal) else 0.0
 
+                val categoryTxList = metrics.transactionsForMonth.filter { it.category.equals(category, ignoreCase = true) && it.type == "gasto" }
+                val isCategoryPaid = categoryTxList.isNotEmpty() && categoryTxList.all { it.isPaid }
+
                 val iconAndColor = getCategoryIconAndColor(category)
 
                 Card(
@@ -532,7 +559,8 @@ fun DashboardScreen(
                             onClick = { clickCategoryDetails = category },
                             onHoldStart = { holdCategoryDetails = category },
                             onHoldEnd = { holdCategoryDetails = null }
-                        ),
+                        )
+                        .alpha(if (isCategoryPaid) 0.6f else 1f),
                     colors = CardDefaults.cardColors(containerColor = CardBackground),
                     shape = RoundedCornerShape(16.dp)
                 ) {
@@ -540,6 +568,22 @@ fun DashboardScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (categoryTxList.isNotEmpty()) {
+                            Checkbox(
+                                checked = isCategoryPaid,
+                                onCheckedChange = { checked ->
+                                    viewModel.toggleCategoryPaid(category, checked)
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = AccentGreen,
+                                    uncheckedColor = GrayText,
+                                    checkmarkColor = Color.Black
+                                ),
+                                modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .testTag("category_checkbox_${category}")
+                            )
+                        }
                         val customImage = viewModel.getCategoryCustomImage(category)
                         Box(
                             modifier = Modifier
@@ -627,7 +671,58 @@ fun DashboardScreen(
             }
         }
 
-        if (metrics.transactionsForMonth.isEmpty()) {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val filters = listOf("Todos", "Fixo", "Variável", "Parcelado")
+                filters.forEach { filter ->
+                    val filterKey = when (filter) {
+                        "Todos" -> "Todos"
+                        "Fixo" -> "fixo"
+                        "Variável" -> "variavel"
+                        "Parcelado" -> "parcelado"
+                        else -> "Todos"
+                    }
+                    val isSelected = mainScreenTypeFilter == filterKey
+                    val textCol = if (isSelected) Color.Black else Color.White.copy(alpha = 0.7f)
+                    val bgCol = if (isSelected) PrimaryCyan else Color.Transparent
+                    
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(bgCol)
+                            .clickable {
+                                mainScreenTypeFilter = filterKey
+                            }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = filter,
+                            color = textCol,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        val filteredMainTransactions = metrics.transactionsForMonth.filter { tx ->
+            if (mainScreenTypeFilter == "Todos") true
+            else tx.type == "gasto" && tx.expenseType == mainScreenTypeFilter
+        }
+
+        if (filteredMainTransactions.isEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -641,7 +736,7 @@ fun DashboardScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Nenhuma movimentação identificada.",
+                            text = "Nenhum gasto do tipo selecionado registrado.",
                             color = GrayText,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
@@ -651,7 +746,7 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         } else {
-            items(metrics.transactionsForMonth.take(10)) { tx ->
+            items(filteredMainTransactions.take(10)) { tx ->
                 val df = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
                 val txIconColor = getCategoryIconAndColor(tx.category)
 
@@ -664,6 +759,7 @@ fun DashboardScreen(
                             onHoldStart = { holdTransactionDetails = tx },
                             onHoldEnd = { holdTransactionDetails = null }
                         )
+                        .alpha(if (tx.type == "gasto" && tx.isPaid) 0.5f else 1.0f)
                         .testTag("transaction_item_${tx.id}"),
                     colors = CardDefaults.cardColors(containerColor = CardBackground),
                     shape = RoundedCornerShape(16.dp)
@@ -672,6 +768,22 @@ fun DashboardScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (tx.type == "gasto") {
+                            Checkbox(
+                                checked = tx.isPaid,
+                                onCheckedChange = { checked ->
+                                    viewModel.toggleTransactionPaid(tx)
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = PrimaryCyan,
+                                    uncheckedColor = GrayText,
+                                    checkmarkColor = Color.Black
+                                ),
+                                modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .testTag("transaction_checkbox_${tx.id}")
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
@@ -750,10 +862,10 @@ fun DashboardScreen(
     // --- Popup details for a selected Category ---
     if (selectedCategoryDetails != null) {
         val category = selectedCategoryDetails!!
-        val categoryTxList = uiState.transactions.filter { it.category.equals(category, ignoreCase = true) }
-        val categoryTotal = categoryTxList.sumOf { if (it.type == "gasto") it.amount else 0.0 }
+        val categoryTxList = metrics.transactionsForMonth.filter { it.category.equals(category, ignoreCase = true) }
+        val categoryTotal = categoryTxList.sumOf { if (it.type == "gasto" && !it.isPaid) it.amount else 0.0 }
         val limitSpent = categoryTxList.sumOf {
-            if (it.type == "gasto") {
+            if (it.type == "gasto" && !it.isPaid) {
                 if (it.expenseType == "parcelado" && it.totalInstallments > 0) {
                     it.amount * it.totalInstallments
                 } else {
@@ -768,6 +880,7 @@ fun DashboardScreen(
         val creditLimit = viewModel.getCategoryLimit(category)
         var isEditingLimit by remember(category) { mutableStateOf(false) }
         var limitInputText by remember(category) { mutableStateOf(creditLimit?.toString() ?: "") }
+        var categoryDialogTypeFilter by remember(category) { mutableStateOf("Todos") }
 
         Dialog(onDismissRequest = { holdCategoryDetails = null; clickCategoryDetails = null }) {
             Card(
@@ -1031,14 +1144,95 @@ fun DashboardScreen(
                         }
                     }
 
-                    Text(
-                        text = "Movimentações (${categoryTxList.size})",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Movimentações (${categoryTxList.size})",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (categoryTxList.isNotEmpty()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Marcar todas",
+                                    color = GrayText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                val isAllPaid = categoryTxList.all { it.isPaid }
+                                Checkbox(
+                                    checked = isAllPaid,
+                                    onCheckedChange = { checked ->
+                                        viewModel.toggleCategoryPaid(category, checked)
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = AccentGreen,
+                                        uncheckedColor = GrayText,
+                                        checkmarkColor = Color.Black
+                                    ),
+                                    modifier = Modifier.testTag("dialog_category_all_checkbox")
+                                )
+                            }
+                        }
+                    }
 
-                    if (categoryTxList.isEmpty()) {
+                    // --- Custom Island for Category Dialog filter ---
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val filters = listOf("Todos", "Fixo", "Variável", "Parcelado")
+                        filters.forEach { filter ->
+                            val filterKey = when (filter) {
+                                "Todos" -> "Todos"
+                                "Fixo" -> "fixo"
+                                "Variável" -> "variavel"
+                                "Parcelado" -> "parcelado"
+                                else -> "Todos"
+                            }
+                            val isSelected = categoryDialogTypeFilter == filterKey
+                            val textCol = if (isSelected) Color.Black else Color.White.copy(alpha = 0.7f)
+                            val bgCol = if (isSelected) PrimaryCyan else Color.Transparent
+                            
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(bgCol)
+                                    .clickable {
+                                        categoryDialogTypeFilter = filterKey
+                                    }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = filter,
+                                    color = textCol,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    val filteredCategoryTxList = remember(categoryTxList, categoryDialogTypeFilter) {
+                        categoryTxList.filter { tx ->
+                            if (categoryDialogTypeFilter == "Todos") true
+                            else tx.expenseType == categoryDialogTypeFilter
+                        }
+                    }
+
+                    if (filteredCategoryTxList.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1046,7 +1240,7 @@ fun DashboardScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Nenhum gasto nesta categoria ainda.",
+                                text = "Nenhum gasto do tipo selecionado nesta categoria.",
                                 color = GrayText,
                                 fontSize = 13.sp
                             )
@@ -1058,7 +1252,7 @@ fun DashboardScreen(
                                 .weight(1f),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(categoryTxList) { tx ->
+                            items(filteredCategoryTxList) { tx ->
                                 val df = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
                                 Row(
                                     modifier = Modifier
@@ -1071,6 +1265,22 @@ fun DashboardScreen(
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    if (tx.type == "gasto") {
+                                        Checkbox(
+                                            checked = tx.isPaid,
+                                            onCheckedChange = { checked ->
+                                                viewModel.toggleTransactionPaid(tx)
+                                            },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = PrimaryCyan,
+                                                uncheckedColor = GrayText,
+                                                checkmarkColor = Color.Black
+                                            ),
+                                            modifier = Modifier
+                                                .padding(end = 4.dp)
+                                                .testTag("dialog_tx_checkbox_${tx.id}")
+                                        )
+                                    }
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = if (uiState.isValuesHidden) "••••" else tx.name,

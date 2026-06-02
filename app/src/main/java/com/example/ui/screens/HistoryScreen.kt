@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import kotlinx.coroutines.withTimeoutOrNull
@@ -63,6 +65,7 @@ fun HistoryScreen(
     // Filters state
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("todos") } // "todos", "gastos", "entradas"
+    var selectedTypeFilter by remember { mutableStateOf("Todos") } // "Todos", "fixo", "variavel", "parcelado"
 
     var holdTransactionDetails by remember { mutableStateOf<Transaction?>(null) }
     var clickTransactionDetails by remember { mutableStateOf<Transaction?>(null) }
@@ -80,7 +83,11 @@ fun HistoryScreen(
             else -> true
         }
 
-        matchesQuery && matchesFilter
+        val matchesType = if (selectedTypeFilter == "Todos") true else {
+            tx.type == "gasto" && tx.expenseType == selectedTypeFilter
+        }
+
+        matchesQuery && matchesFilter && matchesType
     }
 
     val df = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
@@ -164,6 +171,50 @@ fun HistoryScreen(
                         color = if (isSelected) Color.Black else Color.White,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         fontSize = 13.sp
+                    )
+                }
+            }
+        }
+
+        // --- Type Filter Island ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(12.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val filters = listOf("Todos Types", "Fixo", "Variável", "Parcelado")
+            filters.forEach { filter ->
+                val filterKey = when (filter) {
+                    "Todos Types" -> "Todos"
+                    "Fixo" -> "fixo"
+                    "Variável" -> "variavel"
+                    "Parcelado" -> "parcelado"
+                    else -> "Todos"
+                }
+                val isSelected = selectedTypeFilter == filterKey
+                val textCol = if (isSelected) Color.Black else Color.White.copy(alpha = 0.7f)
+                val bgCol = if (isSelected) PrimaryCyan else Color.Transparent
+                
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(bgCol)
+                        .clickable {
+                            selectedTypeFilter = filterKey
+                        }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (filter == "Todos Types") "Todos" else filter,
+                        color = textCol,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -263,6 +314,7 @@ fun HistoryScreen(
                                 onHoldStart = { holdTransactionDetails = tx },
                                 onHoldEnd = { holdTransactionDetails = null }
                             )
+                            .alpha(if (tx.type == "gasto" && tx.isPaid) 0.5f else 1.0f)
                             .animateContentSize(),
                         colors = CardDefaults.cardColors(containerColor = CardBackground),
                         shape = RoundedCornerShape(16.dp)
@@ -271,6 +323,22 @@ fun HistoryScreen(
                             modifier = Modifier.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            if (tx.type == "gasto") {
+                                Checkbox(
+                                    checked = tx.isPaid,
+                                    onCheckedChange = { checked ->
+                                        viewModel.toggleTransactionPaid(tx)
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = PrimaryCyan,
+                                        uncheckedColor = GrayText,
+                                        checkmarkColor = Color.Black
+                                    ),
+                                    modifier = Modifier
+                                        .padding(end = 4.dp)
+                                        .testTag("transaction_checkbox_${tx.id}")
+                                )
+                            }
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)

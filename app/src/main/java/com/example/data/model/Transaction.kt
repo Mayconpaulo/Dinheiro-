@@ -16,5 +16,6 @@ data class Transaction(
     val paidInstallments: Int = 0,
     val remainingInstallments: Int = 0,
     val category: String, // Comida, Lazer, etc.
-    val bankOrNote: String = "" // Banco, Observação, etc. (editable)
+    val bankOrNote: String = "", // Banco, Observação, etc. (editable)
+    val isPaid: Boolean = false
 ) : Serializable
