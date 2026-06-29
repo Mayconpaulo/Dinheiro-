@@ -1,5 +1,6 @@
 package com.example
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -34,7 +35,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.screens.AddTransactionScreen
-import com.example.ui.screens.ChatbotScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.LoginScreen
@@ -58,29 +58,68 @@ enum class Screen {
 }
 
 class MainActivity : ComponentActivity() {
+    private var onNewIntentReceived: ((Intent) -> Unit)? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                MainContent()
+                MainContent(
+                    intent = intent,
+                    registerIntentListener = { listener ->
+                        onNewIntentReceived = listener
+                    }
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        onNewIntentReceived?.invoke(intent)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainContent() {
+fun MainContent(
+    intent: Intent?,
+    registerIntentListener: ((Intent) -> Unit) -> Unit
+) {
     val viewModel: FinanceViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsState()
     
     var currentScreen by remember { mutableStateOf(Screen.Dashboard) }
-    var showChatbotPopup by remember { mutableStateOf(false) }
     var showAddTransactionPopup by remember { mutableStateOf(false) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var showSettingsPopup by remember { mutableStateOf(false) }
     var showProfilePopup by remember { mutableStateOf(false) }
+    var initialAddType by remember { mutableStateOf("gasto") }
+
+    fun handleWidgetIntent(targetIntent: Intent?) {
+        if (targetIntent != null && targetIntent.hasExtra("ADD_TRANSACTION_TYPE")) {
+            val type = targetIntent.getStringExtra("ADD_TRANSACTION_TYPE") ?: "gasto"
+            targetIntent.removeExtra("ADD_TRANSACTION_TYPE")
+            transactionToEdit = null
+            initialAddType = type
+            showAddTransactionPopup = true
+        }
+    }
+
+    LaunchedEffect(intent) {
+        handleWidgetIntent(intent)
+    }
+
+    DisposableEffect(Unit) {
+        registerIntentListener { newIntent ->
+            handleWidgetIntent(newIntent)
+        }
+        onDispose {
+            registerIntentListener {}
+        }
+    }
 
     Scaffold(
         modifier = Modifier
@@ -157,34 +196,7 @@ fun MainContent() {
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // LEFT SIDE: Artificial Intelligence Chatbot FAB
-                        Box(
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(PrimaryCyan, PrimaryPurple, AccentPink)
-                                    )
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = Color.White.copy(alpha = 0.3f),
-                                    shape = CircleShape
-                                )
-                                .clickable { showChatbotPopup = true }
-                                .testTag("ai_chatbot_fab"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = "FinTrack Chatbot IA",
-                                tint = Color.Black,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-
-                        // CENTER: Translucent Frosted Glass Navigation Island Dock
+                        // Translucent Frosted Glass Navigation Island Dock
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -338,56 +350,7 @@ fun MainContent() {
             }
         }
     }
-
-    // Modal Holographic Chatbot Overlay Dialog
-    if (showChatbotPopup) {
-        Dialog(
-            onDismissRequest = { showChatbotPopup = false },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true
-            )
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .clickable(
-                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                            indication = null
-                        ) { showChatbotPopup = false }
-                )
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.92f)
-                        .fillMaxHeight(0.75f)
-                        .border(
-                            width = 1.5.dp,
-                            brush = Brush.linearGradient(
-                                colors = listOf(PrimaryCyan, PrimaryPurple, AccentPink)
-                            ),
-                            shape = RoundedCornerShape(24.dp)
-                        ),
-                    colors = CardDefaults.cardColors(containerColor = CardBackground.copy(alpha = 0.92f)),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        ChatbotScreen(
-                            viewModel = viewModel,
-                            onClose = { showChatbotPopup = false }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    // Modal Holographic Add Transaction Overlay Dialog
+      // Modal Holographic Add Transaction Overlay Dialog
     if (showAddTransactionPopup) {
         Dialog(
             onDismissRequest = { showAddTransactionPopup = false },
@@ -435,7 +398,8 @@ fun MainContent() {
                             onClose = {
                                 showAddTransactionPopup = false
                                 transactionToEdit = null
-                            }
+                            },
+                            initialType = initialAddType
                         )
                     }
                 }

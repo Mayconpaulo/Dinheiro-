@@ -298,20 +298,63 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun toggleTransactionPaid(transaction: Transaction) {
+    fun toggleTransactionPaid(transaction: Transaction, monthOffset: Int? = null) {
         viewModelScope.launch {
-            val updated = transaction.copy(isPaid = !transaction.isPaid)
+            val targetCalendar = Calendar.getInstance()
+            if (monthOffset != null) {
+                targetCalendar.add(Calendar.MONTH, monthOffset)
+            } else {
+                targetCalendar.timeInMillis = transaction.date
+            }
+            val targetYear = targetCalendar.get(Calendar.YEAR)
+            val targetMonth = targetCalendar.get(Calendar.MONTH)
+            val monthStr = String.format(java.util.Locale.US, "%04d-%02d", targetYear, targetMonth)
+
+            val isCurrentlyPaid = transaction.isPaidInMonth(targetYear, targetMonth)
+            val updated = if (transaction.expenseType == "fixo" || transaction.expenseType == "parcelado") {
+                val currentList = transaction.paidMonths.split(",").filter { it.isNotEmpty() }.toMutableList()
+                if (isCurrentlyPaid) {
+                    currentList.remove(monthStr)
+                } else {
+                    currentList.add(monthStr)
+                }
+                transaction.copy(
+                    paidMonths = currentList.joinToString(",")
+                )
+            } else {
+                transaction.copy(isPaid = !transaction.isPaid)
+            }
             repository.update(updated)
         }
     }
 
-    fun toggleCategoryPaid(categoryName: String, isPaid: Boolean) {
+    fun toggleCategoryPaid(categoryName: String, isPaid: Boolean, monthOffset: Int? = null) {
         viewModelScope.launch {
+            val offset = monthOffset ?: _uiState.value.selectedMonthOffset
+            val targetCalendar = Calendar.getInstance().apply {
+                add(Calendar.MONTH, offset)
+            }
+            val targetYear = targetCalendar.get(Calendar.YEAR)
+            val targetMonth = targetCalendar.get(Calendar.MONTH)
+            val monthStr = String.format(java.util.Locale.US, "%04d-%02d", targetYear, targetMonth)
+
             val allTx = _uiState.value.transactions
             allTx.forEach { tx ->
                 if (tx.category.equals(categoryName, ignoreCase = true) && tx.type == "gasto") {
-                    if (tx.isPaid != isPaid) {
-                        repository.update(tx.copy(isPaid = isPaid))
+                    val isCurrentlyPaid = tx.isPaidInMonth(targetYear, targetMonth)
+                    if (isCurrentlyPaid != isPaid) {
+                        val updated = if (tx.expenseType == "fixo" || tx.expenseType == "parcelado") {
+                            val currentList = tx.paidMonths.split(",").filter { it.isNotEmpty() }.toMutableList()
+                            if (isPaid) {
+                                if (!currentList.contains(monthStr)) currentList.add(monthStr)
+                            } else {
+                                currentList.remove(monthStr)
+                            }
+                            tx.copy(paidMonths = currentList.joinToString(","))
+                        } else {
+                            tx.copy(isPaid = isPaid)
+                        }
+                        repository.update(updated)
                     }
                 }
             }
@@ -462,7 +505,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             val txMonth = txCal.get(Calendar.MONTH)
 
             if (tx.type == "gasto") {
-                val isTxPaid = tx.isPaid
+                val isTxPaid = tx.isPaidInMonth(targetYear, targetMonth)
                 when (tx.expenseType) {
                     "fixo" -> {
                         // Fixed expenses occur in any target month after/on its registration date

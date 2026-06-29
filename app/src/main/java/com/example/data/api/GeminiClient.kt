@@ -10,6 +10,7 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
 import retrofit2.http.Query
+import retrofit2.http.Path
 import java.util.concurrent.TimeUnit
 import com.example.BuildConfig
 
@@ -51,8 +52,9 @@ data class Candidate(
 // --- Retrofit API Service ---
 
 interface GeminiApiService {
-    @POST("v1beta/models/gemini-2.5-flash:generateContent")
+    @POST("v1beta/models/{model}:generateContent")
     suspend fun generateContent(
+        @Path("model") model: String,
         @Query("key") apiKey: String,
         @Body request: GenerateContentRequest
     ): GenerateContentResponse
@@ -103,17 +105,71 @@ object GeminiApiClient {
             null
         }
 
-        val request = GenerateContentRequest(
+        // Let's configure the generation config.
+        val requestWithJson = GenerateContentRequest(
             contents = contents,
             systemInstruction = systemInstruction,
             generationConfig = GenerationConfig(responseMimeType = "application/json")
         )
 
-        return try {
-            val response = RetrofitClient.service.generateContent(apiKey, request)
-            response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text 
-                ?: "Desculpe, não consegui gerar uma resposta."
-        } catch (e: Exception) {
+        val requestWithoutJson = GenerateContentRequest(
+            contents = contents,
+            systemInstruction = systemInstruction,
+            generationConfig = null
+        )
+
+        // Try standard fallback models. We will iterate over combinations of modern supported models
+        // and check if they succeed, starting with gemini-3.5-flash which is recommended for basic text tasks.
+        val modelsToTry = listOf(
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite-preview",
+            "gemini-3.1-pro-preview",
+            "gemini-2.5-flash"
+        )
+
+        var lastException: Exception? = null
+
+        // 1st stage: Try each model with JSON enforcement
+        for (modelName in modelsToTry) {
+            try {
+                val response = RetrofitClient.service.generateContent(modelName, apiKey, requestWithJson)
+                val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                if (!text.isNullOrBlank()) {
+                    return text
+                }
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+
+        // 2nd stage fallback: Try each model without JSON enforcement (relying purely on prompt instruction)
+        for (modelName in modelsToTry) {
+            try {
+                val response = RetrofitClient.service.generateContent(modelName, apiKey, requestWithoutJson)
+                val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                if (!text.isNullOrBlank()) {
+                    return text
+                }
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+
+        val e = lastException ?: Exception("Ocorreu um problema desconhecido ao falar com o Gemini.")
+        
+        return if (e is retrofit2.HttpException) {
+            val errorBody = e.response()?.errorBody()?.string() ?: ""
+            if (errorBody.contains("leaked", ignoreCase = true) || errorBody.contains("PERMISSION_DENIED", ignoreCase = true)) {
+                "⚠️ Sua chave de API do Gemini (GEMINI_API_KEY) foi bloqueada/desativada pela Google por segurança (chave reportada como exposta/vazada).\n\n" +
+                "Para corrigir isso e fazer o Chat funcionar imediatamente:\n\n" +
+                "1️⃣ Vá ao **Google AI Studio** e crie uma nova chave de API.\n" +
+                "2️⃣ No painel lateral esquerdo do AI Studio, clique em **Secrets** (ícone de chave 🔑).\n" +
+                "3️⃣ Edite ou adicione a variável **GEMINI_API_KEY** colando a nova chave gerada.\n" +
+                "4️⃣ Volte ao chat e tente sua mensagem novamente!"
+            } else {
+                "Erro ao falar com o assistente inteligente: HTTP ${e.code()} (Detalhe técnico: HttpException - HTTP ${e.code()} - $errorBody)"
+            }
+        } else {
             "Erro ao falar com o assistente inteligente: ${e.localizedMessage ?: "Ocorreu um problema de conexão."} (Detalhe técnico: ${e.javaClass.simpleName} - ${e.message})"
         }
     }

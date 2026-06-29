@@ -305,6 +305,11 @@ fun HistoryScreen(
                         )
                     }
 
+                    val txCal = remember(tx.date) { Calendar.getInstance().apply { timeInMillis = tx.date } }
+                    val txYear = txCal.get(Calendar.YEAR)
+                    val txMonth = txCal.get(Calendar.MONTH)
+                    val isPaid = tx.isPaidInMonth(txYear, txMonth)
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -314,7 +319,7 @@ fun HistoryScreen(
                                 onHoldStart = { holdTransactionDetails = tx },
                                 onHoldEnd = { holdTransactionDetails = null }
                             )
-                            .alpha(if (tx.type == "gasto" && tx.isPaid) 0.5f else 1.0f)
+                            .alpha(if (tx.type == "gasto" && isPaid) 0.5f else 1.0f)
                             .animateContentSize(),
                         colors = CardDefaults.cardColors(containerColor = CardBackground),
                         shape = RoundedCornerShape(16.dp)
@@ -325,7 +330,7 @@ fun HistoryScreen(
                         ) {
                             if (tx.type == "gasto") {
                                 Checkbox(
-                                    checked = tx.isPaid,
+                                    checked = isPaid,
                                     onCheckedChange = { checked ->
                                         viewModel.toggleTransactionPaid(tx)
                                     },

@@ -17,5 +17,14 @@ data class Transaction(
     val remainingInstallments: Int = 0,
     val category: String, // Comida, Lazer, etc.
     val bankOrNote: String = "", // Banco, Observação, etc. (editable)
-    val isPaid: Boolean = false
-) : Serializable
+    val isPaid: Boolean = false,
+    val paidMonths: String = "" // comma-separated YYYY-MM
+) : Serializable {
+    fun isPaidInMonth(year: Int, month: Int): Boolean {
+        if (expenseType != "fixo" && expenseType != "parcelado") {
+            return isPaid
+        }
+        val monthStr = String.format(java.util.Locale.US, "%04d-%02d", year, month)
+        return paidMonths.split(",").contains(monthStr)
+    }
+}

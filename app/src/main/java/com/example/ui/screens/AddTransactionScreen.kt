@@ -51,13 +51,14 @@ fun AddTransactionScreen(
     transactionToEdit: Transaction? = null,
     onTransactionSaved: () -> Unit,
     modifier: Modifier = Modifier,
-    onClose: (() -> Unit)? = null
+    onClose: (() -> Unit)? = null,
+    initialType: String = "gasto"
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
     // Form states
-    var transactionType by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.type ?: "gasto") }
+    var transactionType by remember(transactionToEdit, initialType) { mutableStateOf(transactionToEdit?.type ?: initialType) }
     var name by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.name ?: "") }
     var amountStr by remember(transactionToEdit) {
         mutableStateOf(

@@ -1,6 +1,6 @@
 {
   "name": "Money Control",
-  "description": "Gestão financeira inteligente com chatbot de insights e projeções.",
+  "description": "Gestão financeira inteligente, limpa e moderna para o seu dia a dia.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

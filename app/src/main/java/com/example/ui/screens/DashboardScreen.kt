@@ -103,6 +103,14 @@ fun DashboardScreen(
     // Calculated metrics for selected month offset
     val metrics = viewModel.getProjectionsForMonthOffset(uiState.selectedMonthOffset)
 
+    val targetCalendar = remember(uiState.selectedMonthOffset) {
+        Calendar.getInstance().apply {
+            add(Calendar.MONTH, uiState.selectedMonthOffset)
+        }
+    }
+    val targetYear = targetCalendar.get(Calendar.YEAR)
+    val targetMonth = targetCalendar.get(Calendar.MONTH)
+
     var holdCategoryDetails by remember { mutableStateOf<String?>(null) }
     var clickCategoryDetails by remember { mutableStateOf<String?>(null) }
     val selectedCategoryDetails = holdCategoryDetails ?: clickCategoryDetails
@@ -387,16 +395,20 @@ fun DashboardScreen(
                     modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    val progressPct = if (metrics.incomeTotal > 0) {
+                        (metrics.expenseTotal / metrics.incomeTotal).coerceIn(0.0, 1.0)
+                    } else 0.0
+
                     Text(
-                        text = "Saídas Previstas (${metrics.monthName})",
+                        text = "Saldo Restante (${metrics.monthName})",
                         color = GrayText,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (uiState.isValuesHidden) "R$ ••••" else "R$ ${"%,.2f".format(metrics.expenseTotal)}",
-                        color = Color.White,
+                        text = if (uiState.isValuesHidden) "R$ ••••" else "R$ ${"%,.2f".format(metrics.balance)}",
+                        color = if (metrics.balance >= 0) AccentGreen else AccentPink,
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Black
                     )
@@ -434,16 +446,21 @@ fun DashboardScreen(
                             }
                         }
 
-                        val progressPct = if (metrics.incomeTotal > 0) {
-                            (metrics.expenseTotal / metrics.incomeTotal).coerceIn(0.0, 1.0)
-                        } else 0.0
-
-                        Text(
-                            text = "Comprometido: ${(progressPct * 100).toInt()}%",
-                            color = if (progressPct > 0.8) AccentPink else PrimaryCyan,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.TrendingDown,
+                                contentDescription = "Saídas",
+                                tint = AccentPink,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (uiState.isValuesHidden) "Saídas: R$ ••••" else "Saídas: R$ ${"%,.2f".format(metrics.expenseTotal)}",
+                                color = AccentPink,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -484,16 +501,16 @@ fun DashboardScreen(
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "Livre / Saldo",
+                                text = "Comprometido",
                                 color = GrayText,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (uiState.isValuesHidden) "R$ ••••" else "R$ ${"%,.0f".format(metrics.balance)}",
-                                color = if (metrics.balance >= 0) AccentGreen else AccentPink,
-                                fontSize = 22.sp,
+                                text = "${(progressPct * 100).toInt()}%",
+                                color = if (progressPct > 0.8) AccentPink else PrimaryCyan,
+                                fontSize = 24.sp,
                                 fontWeight = FontWeight.Black
                             )
                         }
@@ -547,7 +564,7 @@ fun DashboardScreen(
                 val pct = if (metrics.expenseTotal > 0) (spent / metrics.expenseTotal) else 0.0
 
                 val categoryTxList = metrics.transactionsForMonth.filter { it.category.equals(category, ignoreCase = true) && it.type == "gasto" }
-                val isCategoryPaid = categoryTxList.isNotEmpty() && categoryTxList.all { it.isPaid }
+                val isCategoryPaid = categoryTxList.isNotEmpty() && categoryTxList.all { it.isPaidInMonth(targetYear, targetMonth) }
 
                 val iconAndColor = getCategoryIconAndColor(category)
 
@@ -759,7 +776,7 @@ fun DashboardScreen(
                             onHoldStart = { holdTransactionDetails = tx },
                             onHoldEnd = { holdTransactionDetails = null }
                         )
-                        .alpha(if (tx.type == "gasto" && tx.isPaid) 0.5f else 1.0f)
+                        .alpha(if (tx.type == "gasto" && tx.isPaidInMonth(targetYear, targetMonth)) 0.5f else 1.0f)
                         .testTag("transaction_item_${tx.id}"),
                     colors = CardDefaults.cardColors(containerColor = CardBackground),
                     shape = RoundedCornerShape(16.dp)
@@ -770,9 +787,9 @@ fun DashboardScreen(
                     ) {
                         if (tx.type == "gasto") {
                             Checkbox(
-                                checked = tx.isPaid,
+                                checked = tx.isPaidInMonth(targetYear, targetMonth),
                                 onCheckedChange = { checked ->
-                                    viewModel.toggleTransactionPaid(tx)
+                                    viewModel.toggleTransactionPaid(tx, uiState.selectedMonthOffset)
                                 },
                                 colors = CheckboxDefaults.colors(
                                     checkedColor = PrimaryCyan,
@@ -863,9 +880,9 @@ fun DashboardScreen(
     if (selectedCategoryDetails != null) {
         val category = selectedCategoryDetails!!
         val categoryTxList = metrics.transactionsForMonth.filter { it.category.equals(category, ignoreCase = true) }
-        val categoryTotal = categoryTxList.sumOf { if (it.type == "gasto" && !it.isPaid) it.amount else 0.0 }
+        val categoryTotal = categoryTxList.sumOf { if (it.type == "gasto" && !it.isPaidInMonth(targetYear, targetMonth)) it.amount else 0.0 }
         val limitSpent = categoryTxList.sumOf {
-            if (it.type == "gasto" && !it.isPaid) {
+            if (it.type == "gasto" && !it.isPaidInMonth(targetYear, targetMonth)) {
                 if (it.expenseType == "parcelado" && it.totalInstallments > 0) {
                     it.amount * it.totalInstallments
                 } else {
@@ -1164,11 +1181,11 @@ fun DashboardScreen(
                                     fontWeight = FontWeight.Medium
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                val isAllPaid = categoryTxList.all { it.isPaid }
+                                val isAllPaid = categoryTxList.all { it.isPaidInMonth(targetYear, targetMonth) }
                                 Checkbox(
                                     checked = isAllPaid,
                                     onCheckedChange = { checked ->
-                                        viewModel.toggleCategoryPaid(category, checked)
+                                        viewModel.toggleCategoryPaid(category, checked, uiState.selectedMonthOffset)
                                     },
                                     colors = CheckboxDefaults.colors(
                                         checkedColor = AccentGreen,
@@ -1267,9 +1284,9 @@ fun DashboardScreen(
                                 ) {
                                     if (tx.type == "gasto") {
                                         Checkbox(
-                                            checked = tx.isPaid,
+                                            checked = tx.isPaidInMonth(targetYear, targetMonth),
                                             onCheckedChange = { checked ->
-                                                viewModel.toggleTransactionPaid(tx)
+                                                viewModel.toggleTransactionPaid(tx, uiState.selectedMonthOffset)
                                             },
                                             colors = CheckboxDefaults.colors(
                                                 checkedColor = PrimaryCyan,
