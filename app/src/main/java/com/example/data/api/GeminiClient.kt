@@ -60,6 +60,38 @@ interface GeminiApiService {
     ): GenerateContentResponse
 }
 
+// --- OpenAI Request / Response Data Classes ---
+
+@JsonClass(generateAdapter = true)
+data class OpenAiMessage(
+    @Json(name = "role") val role: String,
+    @Json(name = "content") val content: String
+)
+
+@JsonClass(generateAdapter = true)
+data class OpenAiRequest(
+    @Json(name = "model") val model: String,
+    @Json(name = "messages") val messages: List<OpenAiMessage>
+)
+
+@JsonClass(generateAdapter = true)
+data class OpenAiResponse(
+    @Json(name = "choices") val choices: List<OpenAiChoice>?
+)
+
+@JsonClass(generateAdapter = true)
+data class OpenAiChoice(
+    @Json(name = "message") val message: OpenAiMessage?
+)
+
+interface OpenAiApiService {
+    @POST("v1/chat/completions")
+    suspend fun generateContent(
+        @retrofit2.http.Header("Authorization") authorization: String,
+        @Body request: OpenAiRequest
+    ): OpenAiResponse
+}
+
 // --- Moshi and Retrofit Setup ---
 
 object RetrofitClient {
@@ -85,11 +117,81 @@ object RetrofitClient {
     }
 }
 
+object OpenAiRetrofitClient {
+    private const val BASE_URL = "https://api.openai.com/"
+
+    private val okHttpClient = OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .build()
+
+    private val moshi = Moshi.Builder()
+        .addLast(KotlinJsonAdapterFactory())
+        .build()
+
+    val service: OpenAiApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(OpenAiApiService::class.java)
+    }
+}
+
 // --- API Client ---
 
 object GeminiApiClient {
     suspend fun generateResponse(prompt: String, systemPrompt: String = "", history: List<Content> = emptyList()): String {
-        val apiKey = BuildConfig.GEMINI_API_KEY
+        val openAiKey = try { BuildConfig.OPENAI_API_KEY } catch (e: Exception) { "" }
+        val geminiKey = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" }
+
+        val hasOpenAi = openAiKey.isNotEmpty() && openAiKey != "MY_OPENAI_API_KEY"
+        val hasGemini = geminiKey.isNotEmpty() && geminiKey != "MY_GEMINI_API_KEY"
+
+        if (!hasOpenAi && !hasGemini) {
+            return "Erro: Nenhuma chave de API configurada. Por favor, configure a chave GEMINI_API_KEY ou OPENAI_API_KEY no painel de segredos do AI Studio."
+        }
+
+        if (hasOpenAi) {
+            return try {
+                val openAiMessages = mutableListOf<OpenAiMessage>()
+                if (systemPrompt.isNotEmpty()) {
+                    openAiMessages.add(OpenAiMessage(role = "system", content = systemPrompt))
+                }
+                history.forEach { content ->
+                    val role = if (content.role == "user") "user" else "assistant"
+                    val text = content.parts.firstOrNull()?.text ?: ""
+                    if (text.isNotEmpty()) {
+                        openAiMessages.add(OpenAiMessage(role = role, content = text))
+                    }
+                }
+                openAiMessages.add(OpenAiMessage(role = "user", content = prompt))
+
+                val request = OpenAiRequest(
+                    model = "gpt-4o-mini",
+                    messages = openAiMessages
+                )
+
+                val response = OpenAiRetrofitClient.service.generateContent("Bearer $openAiKey", request)
+                val reply = response.choices?.firstOrNull()?.message?.content
+                if (!reply.isNullOrBlank()) {
+                    reply
+                } else {
+                    "Erro: Resposta vazia recebida do ChatGPT."
+                }
+            } catch (e: Exception) {
+                if (e is retrofit2.HttpException) {
+                    val errorBody = e.response()?.errorBody()?.string() ?: ""
+                    "Erro ao falar com o ChatGPT (OpenAI): HTTP ${e.code()} - $errorBody"
+                } else {
+                    "Erro ao falar com o ChatGPT (OpenAI): ${e.localizedMessage ?: "Ocorreu um erro de conexão."}"
+                }
+            }
+        }
+
+        val apiKey = geminiKey
         if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
             return "Erro: Chave API do Gemini não configurada. Por favor, configure a chave GEMINI_API_KEY no painel de segredos do AI Studio."
         }
