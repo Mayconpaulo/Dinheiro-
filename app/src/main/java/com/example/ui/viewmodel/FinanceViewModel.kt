@@ -500,55 +500,50 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val activeTransactions = mutableListOf<Transaction>()
 
         for (tx in allTx) {
-            val txCal = Calendar.getInstance().apply { timeInMillis = tx.date }
-            val txYear = txCal.get(Calendar.YEAR)
-            val txMonth = txCal.get(Calendar.MONTH)
+            val isShiftedToNextMonth = tx.type == "gasto" && (
+                tx.expenseType == "parcelado" ||
+                tx.bankOrNote.equals("Crédito", ignoreCase = true) ||
+                tx.bankOrNote.lowercase().contains("credito") ||
+                tx.bankOrNote.lowercase().contains("cartão") ||
+                tx.bankOrNote.lowercase().contains("cartao")
+            )
+
+            val effectiveCal = Calendar.getInstance().apply {
+                timeInMillis = tx.date
+                if (isShiftedToNextMonth) {
+                    add(Calendar.MONTH, 1)
+                }
+            }
+            val txYear = effectiveCal.get(Calendar.YEAR)
+            val txMonth = effectiveCal.get(Calendar.MONTH)
 
             if (tx.type == "gasto") {
                 val isTxPaid = tx.isPaidInMonth(targetYear, targetMonth)
                 when (tx.expenseType) {
                     "fixo" -> {
                         // Fixed expenses occur in any target month after/on its registration date
-                        if (tx.date <= targetCalendar.timeInMillis || (txYear == targetYear && txMonth == targetMonth)) {
-                            if (!isTxPaid) {
-                                expenseTotal += tx.amount
-                                categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
-                            } else {
-                                if (!categorySpent.containsKey(tx.category)) {
-                                    categorySpent[tx.category] = 0.0
-                                }
-                            }
+                        if (effectiveCal.timeInMillis <= targetCalendar.timeInMillis || (txYear == targetYear && txMonth == targetMonth)) {
+                            expenseTotal += tx.amount
+                            categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
                             activeTransactions.add(tx)
                         }
                     }
                     "variavel" -> {
                         // Variable expenses only occur in their actual transaction month, and show in that target month
                         if (txYear == targetYear && txMonth == targetMonth) {
-                            if (!isTxPaid) {
-                                expenseTotal += tx.amount
-                                categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
-                            } else {
-                                if (!categorySpent.containsKey(tx.category)) {
-                                    categorySpent[tx.category] = 0.0
-                                }
-                            }
+                            expenseTotal += tx.amount
+                            categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
                             activeTransactions.add(tx)
                         }
                     }
                     "parcelado" -> {
                         // Installments are smart:
-                        val monthDiff = getMonthDifference(tx.date, targetCalendar.timeInMillis)
+                        val monthDiff = getMonthDifference(effectiveCal.timeInMillis, targetCalendar.timeInMillis)
                         
                         if (monthDiff >= 0) {
                             if (monthDiff < tx.remainingInstallments) {
-                                if (!isTxPaid) {
-                                    expenseTotal += tx.amount
-                                    categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
-                                } else {
-                                    if (!categorySpent.containsKey(tx.category)) {
-                                        categorySpent[tx.category] = 0.0
-                                    }
-                                }
+                                expenseTotal += tx.amount
+                                categorySpent[tx.category] = (categorySpent[tx.category] ?: 0.0) + tx.amount
                                 activeTransactions.add(tx)
                             }
                         }
@@ -633,7 +628,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
         // Aggregate current context
         val totalIncome = allTx.filter { it.type == "entrada" }.sumOf { it.amount }
-        val totalExpense = allTx.filter { it.type == "gasto" && !it.isPaid }.sumOf { it.amount }
+        val totalExpense = allTx.filter { it.type == "gasto" }.sumOf { it.amount }
         
         val expensesByCategory = allTx.filter { it.type == "gasto" }
             .groupBy { it.category }

@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -71,6 +72,23 @@ fun AddTransactionScreen(
     }
     var selectedDate by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.date ?: System.currentTimeMillis()) }
     var expenseType by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.expenseType ?: "fixo") }
+    var paymentMethod by remember(transactionToEdit) {
+        mutableStateOf(
+            if (transactionToEdit != null && transactionToEdit.bankOrNote.isNotEmpty()) {
+                transactionToEdit.bankOrNote
+            } else if (transactionToEdit != null && transactionToEdit.expenseType == "parcelado") {
+                "Crédito"
+            } else {
+                "Pix"
+            }
+        )
+    }
+
+    LaunchedEffect(expenseType) {
+        if (expenseType == "parcelado") {
+            paymentMethod = "Crédito"
+        }
+    }
 
     // Installment states
     var totalInstallmentsStr by remember(transactionToEdit) { mutableStateOf(transactionToEdit?.totalInstallments?.toString() ?: "12") }
@@ -396,6 +414,49 @@ fun AddTransactionScreen(
                 }
             }
 
+            Text(
+                text = "Forma de Pagamento",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    Pair("Pix", "Pix"),
+                    Pair("Débito", "Débito"),
+                    Pair("Crédito", "Crédito")
+                ).forEach { pair ->
+                    val isEnabled = expenseType != "parcelado" || pair.first == "Crédito"
+                    val isSelected = paymentMethod.equals(pair.first, ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (isSelected) {
+                                    if (pair.first == "Crédito") AccentPink else PrimaryCyan
+                                } else {
+                                    CardBackground
+                                }
+                            )
+                            .clickable(enabled = isEnabled) { paymentMethod = pair.first }
+                            .alpha(if (isEnabled) 1.0f else 0.4f)
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = pair.second,
+                            color = if (isSelected) Color.Black else Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+
             // If Installment: Show total/paid fields and auto compute remaining
             if (expenseType == "parcelado") {
                 Card(
@@ -637,7 +698,8 @@ fun AddTransactionScreen(
                             totalInstallments = if (transactionType == "gasto" && expenseType == "parcelado") totalInst else 0,
                             paidInstallments = if (transactionType == "gasto" && expenseType == "parcelado") paidInst else 0,
                             remainingInstallments = if (transactionType == "gasto" && expenseType == "parcelado") remainingInst else 0,
-                            category = categoryText.trim()
+                            category = categoryText.trim(),
+                            bankOrNote = if (transactionType == "gasto") paymentMethod else ""
                         )
                         viewModel.updateTransaction(updatedTx)
                     } else {
@@ -651,7 +713,7 @@ fun AddTransactionScreen(
                             paidInstallments = if (transactionType == "gasto" && expenseType == "parcelado") paidInst else 0,
                             remainingInstallments = if (transactionType == "gasto" && expenseType == "parcelado") remainingInst else 0,
                             category = categoryText.trim(),
-                            bankOrNote = "" // Bank unified under categories as requested
+                            bankOrNote = if (transactionType == "gasto") paymentMethod else ""
                         )
                     }
 

@@ -880,9 +880,9 @@ fun DashboardScreen(
     if (selectedCategoryDetails != null) {
         val category = selectedCategoryDetails!!
         val categoryTxList = metrics.transactionsForMonth.filter { it.category.equals(category, ignoreCase = true) }
-        val categoryTotal = categoryTxList.sumOf { if (it.type == "gasto" && !it.isPaidInMonth(targetYear, targetMonth)) it.amount else 0.0 }
+        val categoryTotal = categoryTxList.sumOf { if (it.type == "gasto") it.amount else 0.0 }
         val limitSpent = categoryTxList.sumOf {
-            if (it.type == "gasto" && !it.isPaidInMonth(targetYear, targetMonth)) {
+            if (it.type == "gasto") {
                 if (it.expenseType == "parcelado" && it.totalInstallments > 0) {
                     it.amount * it.totalInstallments
                 } else {
